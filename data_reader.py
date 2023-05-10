@@ -2,7 +2,7 @@ import sys
 import struct
 import numpy as np
 import sklearn
-from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
 import csv
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
@@ -11,10 +11,10 @@ TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 MS_PER_SEC = 1000
 
 
+# Convert TAC measurement to a class
 def tac_to_class(tac: float):
     if tac < 0:
         tac = 0
-
     tac = round(tac, 3) * 1000
     if tac < 80:
         return TAC_LEVEL_0
@@ -22,6 +22,7 @@ def tac_to_class(tac: float):
         return TAC_LEVEL_1
 
 
+# Load data from CSVs
 def load_data(
     pid: str,
     limit: int,
@@ -29,6 +30,7 @@ def load_data(
     window: int,
     window_step: int,
     sample_rate: int = 20,
+    test_ratio: float = 0.5,
 ):
     print("Reading in Data for person %s" % (pid))
     # Read in accelerometer data
@@ -54,6 +56,10 @@ def load_data(
         for v in accel_data_full
         if v[1] == pid
     ]
+    if limit > len(accel_data_specific):
+        limit = len(accel_data_specific)
+    accel_data_specific = accel_data_specific[offset:limit]
+
     # Down sample accelerometer data
     accel_data = []
     sample_data = []
@@ -76,7 +82,6 @@ def load_data(
     # Get formatted TAC data
     tac_data = [(int(v[0]) * 1000, tac_to_class(float(v[1]))) for v in tac_data]
     tac_data_length = len(tac_data)
-
     tac_data_labels = []
     i = 0
     j = 0
@@ -86,41 +91,30 @@ def load_data(
         else:
             j = j + 1  # Move to next TAC entry
         i = i + 1  # Go to next accel data
-
+    accel_data = accel_data[0 : len(tac_data_labels)]
     print("Total Data length: %d" % (len(tac_data_labels)))
 
-    if limit > len(tac_data_labels):
-        limit = len(tac_data_labels)
-
     print("Creating data sets")
-    # Create training set and test set
     # Split data into two parts
-    max_data_length = limit - offset
-    split_point = int((3 * max_data_length) / 4) + offset
-    train_data_accel = accel_data[offset:split_point]
+    train_data_accel, test_data_accel, train_data_tac, test_data_tac = train_test_split(
+        np.array(accel_data), np.array(tac_data_labels), test_size=test_ratio
+    )
+    train_length = train_data_accel.shape[0]
+    test_length = test_data_accel.shape[0]
+
+    # Change training data to be windowed
     train_data_accel = [
         train_data_accel[base : base + window]
         for base in range(0, len(train_data_accel), window_step)
     ]
-    train_data_tac = tac_data_labels[offset:split_point]
     train_data_tac = [
         train_data_tac[base : base + window]
         for base in range(0, len(train_data_tac), window_step)
     ]
-    train_set = tuple(zip(train_data_accel, train_data_tac))
-    print("Data Length For Training: %d" % (split_point - offset))
 
-    test_data_accel = accel_data[split_point:limit]
-    # test_data_accel = [
-    #     test_data_accel[base : base + window]
-    #     for base in range(0, len(test_data_accel), window_step)
-    # ]
-    test_data_tac = tac_data_labels[split_point:limit]
-    # test_data_tac = [
-    #     test_data_tac[base : base + window]
-    #     for base in range(0, len(test_data_tac), window_step)
-    # ]
+    train_set = tuple(zip(train_data_accel, train_data_tac))
+    print("Data Length For Training: %d" % (train_length))
     test_set = tuple(zip(test_data_accel, test_data_tac))
-    print("Data Length For Testing: %d" % (limit - split_point))
+    print("Data Length For Testing: %d" % (test_length))
 
     return (train_set, test_set)

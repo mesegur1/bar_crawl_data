@@ -5,14 +5,22 @@ import torchhd
 from torchhd import embeddings
 from torchhd import models
 from data_reader import load_data
+import torchmetrics
 
 DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
+N_GRAM_SIZE = 2
 WINDOW = 200
 WINDOW_STEP = 150
 LEARNING_RATE = 0.5
+PID = "BK7610"
+START_OFFSET = 0
+END_INDEX = 12000000
+TRAINING_EPOCHS = 5
+SAMPLE_RATE = 20
+TEST_RATIO = 0.25
 
 
 # Encoder for Bar Crawl Data
@@ -52,14 +60,18 @@ class Encoder(torch.nn.Module):
         # Data fusion of channels
         sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
         sample_hv = torchhd.multiset(sample_hvs)
+        # sample_hv = torchhd.ngrams(sample_hv.unsqueeze(0), n=N_GRAM_SIZE)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
         return torchhd.hard_quantize(sample_hv)
 
 
 if __name__ == "__main__":
+    pid = PID
     # Load data from CSVs
-    train_set, test_set = load_data("DK3500", 1200000, 0, WINDOW, WINDOW_STEP)
+    train_set, test_set = load_data(
+        pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
+    )
     # Create Centroid model
     model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64)
     # Create Encoder module
@@ -68,7 +80,7 @@ if __name__ == "__main__":
     # Train using training set half
     print("Begin training with length %d windows" % WINDOW)
     with torch.no_grad():
-        for e in range(0, 5):
+        for e in range(0, TRAINING_EPOCHS):
             print("Epoch %d" % (e))
             for x, y in train_set:
                 input_tensor = torch.tensor(x, dtype=torch.float64)
@@ -86,18 +98,14 @@ if __name__ == "__main__":
 
     # Test using test set half
     print("Begin Predicting.")
-    label_pred = []
-    correct_pred = []
+    accuracy = torchmetrics.Accuracy("multiclass", num_classes=NUM_TAC_LEVELS)
     with torch.no_grad():
         for x, y in test_set:
             query_tensor = torch.tensor(x, dtype=torch.float64)
             query_tensor = query_tensor.unsqueeze(0)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output)
-            label_pred.append(y_pred.item())
-            correct_pred.append(torch.tensor(y, dtype=torch.int64).item())
+            y_pred = torch.argmax(output).unsqueeze(0)
+            accuracy.update(y_pred, torch.tensor(y, dtype=torch.int64).unsqueeze(0))
 
-    running_accuracy = sum(1 for x, y in zip(label_pred, correct_pred) if x == y)
-    percent_accuracy = 100 * running_accuracy / len(label_pred)
-    print("Accuracy of the model is: %d %%" % (percent_accuracy))
+    print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
