@@ -11,14 +11,13 @@ DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
-N_GRAM_SIZE = 2
 WINDOW = 200
 WINDOW_STEP = 150
 LEARNING_RATE = 0.5
 PID = "BK7610"
 START_OFFSET = 0
 END_INDEX = 12000000
-TRAINING_EPOCHS = 5
+TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 TEST_RATIO = 0.25
 
@@ -60,7 +59,6 @@ class Encoder(torch.nn.Module):
         # Data fusion of channels
         sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
         sample_hv = torchhd.multiset(sample_hvs)
-        # sample_hv = torchhd.ngrams(sample_hv.unsqueeze(0), n=N_GRAM_SIZE)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
         return torchhd.hard_quantize(sample_hv)
