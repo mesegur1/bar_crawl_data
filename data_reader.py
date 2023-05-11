@@ -97,7 +97,10 @@ def load_data(
     print("Creating data sets")
     # Split data into two parts
     train_data_accel, test_data_accel, train_data_tac, test_data_tac = train_test_split(
-        np.array(accel_data), np.array(tac_data_labels), test_size=test_ratio
+        np.array(accel_data),
+        np.array(tac_data_labels),
+        test_size=test_ratio,
+        shuffle=False,
     )
     train_length = train_data_accel.shape[0]
     test_length = test_data_accel.shape[0]

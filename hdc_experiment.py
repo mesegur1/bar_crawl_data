@@ -11,13 +11,13 @@ DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
-WINDOW = 200
-WINDOW_STEP = 150
+WINDOW = 100
+WINDOW_STEP = 80
 LEARNING_RATE = 0.5
 PID = "BK7610"
 START_OFFSET = 0
 END_INDEX = 12000000
-TRAINING_EPOCHS = 1
+TRAINING_EPOCHS = 2
 SAMPLE_RATE = 20
 TEST_RATIO = 0.25
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     print("Begin training with length %d windows" % WINDOW)
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
-            print("Epoch %d" % (e))
+            print("Training Epoch %d" % (e))
             for x, y in train_set:
                 input_tensor = torch.tensor(x, dtype=torch.float64)
                 input_hypervector = encode(input_tensor)
