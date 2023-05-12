@@ -59,6 +59,9 @@ def load_data(
     if limit > len(accel_data_specific):
         limit = len(accel_data_specific)
     accel_data_specific = accel_data_specific[offset:limit]
+    if pid == "JB3156" or pid == "CC6740":
+        # skip first row (dummy data)
+        accel_data_specific = accel_data_specific[1:-1]
 
     # Down sample accelerometer data
     accel_data = []
