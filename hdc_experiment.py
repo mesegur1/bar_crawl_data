@@ -12,14 +12,16 @@ DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
-WINDOW = 100
-WINDOW_STEP = 80
-LEARNING_RATE = 0.5
+WINDOW = 80
+WINDOW_STEP = 40
+LEARNING_RATE = 0.035
 START_OFFSET = 0
-END_INDEX = 12000000
-TRAINING_EPOCHS = 3
+END_INDEX = 1200000
+TRAINING_EPOCHS = 2
 SAMPLE_RATE = 20
-TEST_RATIO = 0.25
+TEST_RATIO = 0.30
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # Encoder for Bar Crawl Data
@@ -28,19 +30,19 @@ class Encoder(torch.nn.Module):
         super(Encoder, self).__init__()
 
         self.signal_level_x = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+            levels, out_dimension, dtype=torch.float64, low=-1, high=1
         )
         self.signal_level_y = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+            levels, out_dimension, dtype=torch.float64, low=-1, high=1
         )
         self.signal_level_z = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+            levels, out_dimension, dtype=torch.float64, low=-1, high=1
         )
         self.channel_basis = embeddings.Random(
             NUM_CHANNELS, out_dimension, dtype=torch.float64
         )
         self.timestamps = embeddings.Thermometer(
-            timestamps, out_dimension, dtype=torch.float64
+            timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
         )
 
     # Encode window of feature vectors (x,y,z)
@@ -61,6 +63,7 @@ class Encoder(torch.nn.Module):
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
+        sample_hv = torchhd.hard_quantize(sample_hv)
         return sample_hv
 
 
@@ -71,9 +74,12 @@ def run_test_for_pid(pid: str):
         pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
     )
     # Create Centroid model
-    model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64)
+    model = models.Centroid(
+        DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
+    )
     # Create Encoder module
     encode = Encoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+    encode = encode.to(device)
 
     # Train using training set half
     print(
@@ -84,30 +90,33 @@ def run_test_for_pid(pid: str):
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
             for x, y in train_set:
-                input_tensor = torch.tensor(x, dtype=torch.float64)
+                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                 input_hypervector = encode(input_tensor)
                 input_hypervector = input_hypervector.unsqueeze(0)
-                label_tensor = torch.round(
-                    torch.tensor(y, dtype=torch.float64).mean()
-                ).long()
+                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
 
     # Normalize model
-    print("Normalizing model")
-    model.normalize()
+    # print("Normalizing model")
+    # model.normalize()
 
     # Test using test set half
     print("Begin Predicting.")
-    accuracy = torchmetrics.Accuracy("multiclass", num_classes=NUM_TAC_LEVELS)
+    accuracy = torchmetrics.Accuracy(
+        "multiclass",
+        num_classes=NUM_TAC_LEVELS,
+    )
+    accuracy = accuracy.to(device)
     with torch.no_grad():
         for x, y in test_set:
-            query_tensor = torch.tensor(x, dtype=torch.float64)
-            query_tensor = query_tensor.unsqueeze(0)
+            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output).unsqueeze(0)
-            accuracy.update(y_pred, torch.tensor(y, dtype=torch.int64).unsqueeze(0))
+            y_pred = torch.argmax(output).unsqueeze(0).to(device)
+            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+            label_tensor = label_tensor.unsqueeze(0)
+            accuracy.update(y_pred, label_tensor)
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     return accuracy.compute().item() * 100
@@ -115,7 +124,7 @@ def run_test_for_pid(pid: str):
 
 if __name__ == "__main__":
     pids = [
-        # "BK7610",
+        "BK7610",
         "BU4707",
         "CC6740",
         "DC6359",
@@ -130,10 +139,13 @@ if __name__ == "__main__":
         "SF3079",
     ]
 
+    print("Using {} device".format(device))
+
     with open("hdc_output.csv", "w", newline="") as file:
         writer = csv.writer(file)
         for pid in pids:
             accuracy = run_test_for_pid(pid)
             writer.writerow([pid, accuracy])
+            file.flush()
         file.close()
     print("All tests done")

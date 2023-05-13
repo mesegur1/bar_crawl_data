@@ -2,6 +2,7 @@ import sys
 import struct
 import numpy as np
 import sklearn
+import torch
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -117,6 +118,20 @@ def load_data(
         train_data_tac[base : base + window]
         for base in range(0, len(train_data_tac), window_step)
     ]
+    # train_data_accel = torch.tensor(train_data_accel, device=device)
+    # train_data_tac = torch.tensor(train_data_tac, device=device)
+
+    # Change test data to be windowed
+    test_data_accel = [
+        test_data_accel[base : base + window]
+        for base in range(0, len(test_data_accel), window_step)
+    ]
+    test_data_tac = [
+        test_data_tac[base : base + window]
+        for base in range(0, len(test_data_tac), window_step)
+    ]
+    # test_data_accel = torch.tensor(test_data_accel, device=device)
+    # test_data_tac = torch.tensor(test_data_tac, device=device)
 
     train_set = tuple(zip(train_data_accel, train_data_tac))
     print("Data Length For Training: %d" % (train_length))
