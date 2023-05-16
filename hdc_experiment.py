@@ -12,8 +12,8 @@ DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
-WINDOW = 80
-WINDOW_STEP = 40
+WINDOW = 100
+WINDOW_STEP = 80
 LEARNING_RATE = 0.035
 START_OFFSET = 0
 END_INDEX = 1200000
@@ -30,13 +30,13 @@ class Encoder(torch.nn.Module):
         super(Encoder, self).__init__()
 
         self.signal_level_x = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64, low=-1, high=1
+            levels, out_dimension, dtype=torch.float64, low=-5, high=5
         )
         self.signal_level_y = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64, low=-1, high=1
+            levels, out_dimension, dtype=torch.float64, low=-5, high=5
         )
         self.signal_level_z = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64, low=-1, high=1
+            levels, out_dimension, dtype=torch.float64, low=-5, high=5
         )
         self.channel_basis = embeddings.Random(
             NUM_CHANNELS, out_dimension, dtype=torch.float64
