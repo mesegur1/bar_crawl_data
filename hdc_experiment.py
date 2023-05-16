@@ -6,6 +6,8 @@ from torchhd import embeddings
 from torchhd import models
 from data_reader import load_data
 import torchmetrics
+import matplotlib.pyplot as plt
+from sklearn.metrics import RocCurveDisplay
 import csv
 
 DIMENSIONS = 6000
@@ -13,11 +15,11 @@ NUM_CHANNELS = 3
 NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
 WINDOW = 200
-WINDOW_STEP = 100
+WINDOW_STEP = 50
 LEARNING_RATE = 0.035
 START_OFFSET = 0
 END_INDEX = 1200000
-TRAINING_EPOCHS = 2
+TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 TEST_RATIO = 0.30
 
