@@ -3,6 +3,7 @@ import struct
 import numpy as np
 import sklearn
 import torch
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -10,6 +11,8 @@ TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 
 MS_PER_SEC = 1000
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # Convert TAC measurement to a class
@@ -23,6 +26,21 @@ def tac_to_class(tac: float):
         return TAC_LEVEL_1
 
 
+accel_data_full = []
+
+
+# Load in accelerometer data into memory
+def load_accel_data_full():
+    global accel_data_full
+    print("Read in accelerometer data")
+    with open("data/all_accelerometer_data_pids_13.csv", "r", newline="") as file:
+        reader = csv.reader(file)
+        next(reader)
+        for row in tqdm(reader):
+            accel_data_full.append(row)
+        file.close()
+
+
 # Load data from CSVs
 def load_data(
     pid: str,
@@ -33,15 +51,16 @@ def load_data(
     sample_rate: int = 20,
     test_ratio: float = 0.5,
 ):
+    global accel_data_full
     print("Reading in Data for person %s" % (pid))
-    # Read in accelerometer data
-    accel_data_full = []
-    with open("data/all_accelerometer_data_pids_13.csv", "r", newline="") as file:
-        reader = csv.reader(file)
-        next(reader)
-        for row in reader:
-            accel_data_full.append(row)
-        file.close()
+    # # Read in accelerometer data
+    # accel_data_full = []
+    # with open("data/all_accelerometer_data_pids_13.csv", "r", newline="") as file:
+    #     reader = csv.reader(file)
+    #     next(reader)
+    #     for i, row in reader:
+    #         accel_data_full.append(row)
+    #     file.close()
     # Read in clean TAC data
     tac_data = []
     with open("data/clean_tac/" + pid + "_clean_TAC.csv", "r", newline="") as file:
@@ -118,8 +137,6 @@ def load_data(
         train_data_tac[base : base + window]
         for base in range(0, len(train_data_tac), window_step)
     ]
-    # train_data_accel = torch.tensor(train_data_accel, device=device)
-    # train_data_tac = torch.tensor(train_data_tac, device=device)
 
     # Change test data to be windowed
     test_data_accel = [
@@ -130,8 +147,6 @@ def load_data(
         test_data_tac[base : base + window]
         for base in range(0, len(test_data_tac), window_step)
     ]
-    # test_data_accel = torch.tensor(test_data_accel, device=device)
-    # test_data_tac = torch.tensor(test_data_tac, device=device)
 
     train_set = tuple(zip(train_data_accel, train_data_tac))
     print("Data Length For Training: %d" % (train_length))

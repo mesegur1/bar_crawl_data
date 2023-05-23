@@ -5,9 +5,11 @@ import torchhd
 from torchhd import embeddings
 from torchhd import models
 from data_reader import load_data
+from data_reader import load_accel_data_full
 import torchmetrics
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
+from tqdm import tqdm
 import csv
 
 DIMENSIONS = 6000
@@ -50,9 +52,12 @@ class Encoder(torch.nn.Module):
     # Encode window of feature vectors (x,y,z)
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # Get level hypervectors for x, y, z samples
-        x_levels = self.signal_level_x(input[:, 1])
-        y_levels = self.signal_level_y(input[:, 2])
-        z_levels = self.signal_level_z(input[:, 3])
+        x_signal = torch.nn.functional.normalize(input[:, 1], dim=0)
+        y_signal = torch.nn.functional.normalize(input[:, 2], dim=0)
+        z_signal = torch.nn.functional.normalize(input[:, 3], dim=0)
+        x_levels = self.signal_level_x(x_signal)
+        y_levels = self.signal_level_y(y_signal)
+        z_levels = self.signal_level_z(z_signal)
         # Get time hypervectors
         times = self.timestamps(input[:, 0])
         # Bind time sequence for x, y, z samples
@@ -91,7 +96,7 @@ def run_test_for_pid(pid: str):
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
-            for x, y in train_set:
+            for x, y in tqdm(train_set):
                 input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                 input_hypervector = encode(input_tensor)
                 input_hypervector = input_hypervector.unsqueeze(0)
@@ -111,7 +116,7 @@ def run_test_for_pid(pid: str):
     )
     accuracy = accuracy.to(device)
     with torch.no_grad():
-        for x, y in test_set:
+        for x, y in tqdm(test_set):
             query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
@@ -142,6 +147,8 @@ if __name__ == "__main__":
     ]
 
     print("Using {} device".format(device))
+
+    load_accel_data_full()
 
     with open("hdc_output.csv", "w", newline="") as file:
         writer = csv.writer(file)
