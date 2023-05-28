@@ -18,8 +18,7 @@ import getopt, sys
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 6000
 NUM_CHANNELS = 3
-NUM_SIGNAL_LEVELS = 100
-NUM_RCN_NODES = 100
+NUM_RCN_NODES = 200
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.035
 
@@ -37,28 +36,27 @@ my_device = torch_device("cuda" if torch.cuda.is_available() else "cpu")
 pid_data_sets = {}
 PIDS = [
     "BK7610",
-    # "BU4707",
-    # "CC6740",
-    # "DC6359",
-    # "DK3500",
-    # "HV0618",
-    # "JB3156",
-    # "JR8022",
-    # "MC7070",
-    # "MJ8002",
-    # "PC6771",
-    # "SA0297",
-    # "SF3079",
+    "BU4707",
+    "CC6740",
+    "DC6359",
+    "DK3500",
+    "HV0618",
+    "JB3156",
+    "JR8022",
+    "MC7070",
+    "MJ8002",
+    "PC6771",
+    "SA0297",
+    "SF3079",
 ]
 
 
-# HDC Encoder for Bar Crawl Data
+# RCN-HDC Encoder for Bar Crawl Data
 class RcnHdcEncoder(torch.nn.Module):
-    def __init__(self, timestamps: int, out_dimension: int):
+    def __init__(self, out_dimension: int):
         super(RcnHdcEncoder, self).__init__()
-        self.nodes = NUM_RCN_NODES
         self.hps = {
-            "n_nodes": self.nodes,
+            "n_nodes": NUM_RCN_NODES,
             "n_inputs": NUM_CHANNELS,
             "n_outputs": NUM_CHANNELS,
             "connectivity": 0.2,
@@ -68,19 +66,12 @@ class RcnHdcEncoder(torch.nn.Module):
             "bias": 1.4,
         }
         self.rcn = RcNetwork(**self.hps, feedback=True)
-        self.x_basis = self.generate_basis(self.nodes + NUM_CHANNELS, out_dimension)
-        self.y_basis = self.generate_basis(self.nodes + NUM_CHANNELS, out_dimension)
-        self.z_basis = self.generate_basis(self.nodes + NUM_CHANNELS, out_dimension)
+        self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
+        self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
+        self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
 
         self.channel_basis = embeddings.Random(
             NUM_CHANNELS, out_dimension, device=my_device
-        )
-        self.timestamps = embeddings.Thermometer(
-            timestamps,
-            out_dimension,
-            low=0,
-            high=timestamps,
-            device=my_device,
         )
 
     # Generate n x d matrix with orthogonal rows
@@ -95,27 +86,21 @@ class RcnHdcEncoder(torch.nn.Module):
     def forward(self, signals: torch.Tensor) -> torch.Tensor:
         # Feature extraction from x, y, z samples
         self.rcn.fit(X=signals[:-1, 1:], y=signals[1:, 1:])
-        x_hvs = torch.matmul(
+        x_hypervector = torch.matmul(
             self.rcn.LinOut.weight.data[0].float(), self.x_basis.float()
         )
-        y_hvs = torch.matmul(
+        y_hypervector = torch.matmul(
             self.rcn.LinOut.weight.data[1].float(), self.y_basis.float()
         )
-        z_hvs = torch.matmul(
+        z_hypervector = torch.matmul(
             self.rcn.LinOut.weight.data[2].float(), self.z_basis.float()
         )
-        # Get time hypervectors
-        times = self.timestamps(signals[:, 0])
-        # Bind time sequence for x, y, z sample hypervectors
-        x_hypervector = torchhd.multiset(torchhd.bind(x_hvs, times))
-        y_hypervector = torchhd.multiset(torchhd.bind(y_hvs, times))
-        z_hypervector = torchhd.multiset(torchhd.bind(z_hvs, times))
         sample_hvs = torch.stack((x_hypervector, y_hypervector, z_hypervector))
         # Data fusion of channels
         sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
-        # sample_hv = torch.tanh(sample_hv)
+        sample_hv = torch.tanh(sample_hv)
         return sample_hv
 
 
@@ -176,7 +161,7 @@ def run_individual_train_and_test_for_pid(pid: str):
     # Create Centroid model
     model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, device=my_device)
     # Create Encoder module
-    encode = RcnHdcEncoder(WINDOW, DIMENSIONS)
+    encode = RcnHdcEncoder(DIMENSIONS)
     encode = encode.to(my_device)
 
     # Run training
@@ -238,7 +223,7 @@ if __name__ == "__main__":
             # Create common Centroid model
             model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, device=my_device)
             # Create common HDCEncoder module
-            encode = RcnHdcEncoder(WINDOW, DIMENSIONS)
+            encode = RcnHdcEncoder(DIMENSIONS)
             encode = encode.to(my_device)
 
             with open("rcn_hdc_output_combined.csv", "w", newline="") as file:
