@@ -21,6 +21,11 @@ NUM_CHANNELS = 3
 NUM_RCN_NODES = 200
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.035
+RCN_CONNECTIVITY = 0.2
+RCN_SPECTRAL_RADIUS = 1.2
+RCN_REGULARIZATION = 1.5
+RCN_LEAKING_RATE = 0.01
+RCN_BIAS = 1.4
 
 # Data windowing settings
 WINDOW = 200
@@ -59,11 +64,11 @@ class RcnHdcEncoder(torch.nn.Module):
             "n_nodes": NUM_RCN_NODES,
             "n_inputs": NUM_CHANNELS,
             "n_outputs": NUM_CHANNELS,
-            "connectivity": 0.2,
-            "spectral_radius": 1.2,
-            "regularization": 1.5,
-            "leaking_rate": 0.01,
-            "bias": 1.4,
+            "connectivity": RCN_CONNECTIVITY,
+            "spectral_radius": RCN_SPECTRAL_RADIUS,
+            "regularization": RCN_REGULARIZATION,
+            "leaking_rate": RCN_LEAKING_RATE,
+            "bias": RCN_BIAS,
         }
         self.rcn = RcNetwork(**self.hps, feedback=True)
         self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
