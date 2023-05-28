@@ -109,7 +109,8 @@ class HDCEncoder(torch.nn.Module):
         sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
-        # sample_hv = torch.tanh(sample_hv)
+        sample_hv = torch.tanh(sample_hv)
+        sample_hv = torchhd.hard_quantize(sample_hv)
         return sample_hv
 
 
