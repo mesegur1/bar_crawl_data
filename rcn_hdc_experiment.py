@@ -1,6 +1,7 @@
 # Experiment with barcrawl data
 import torch
 import numpy as np
+from rctorch_mod import *
 import torchhd
 from torchhd import embeddings
 from torchhd import models
@@ -18,26 +19,25 @@ import getopt, sys
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 6000
 NUM_CHANNELS = 3
-NUM_SIGNAL_LEVELS = 100
+NUM_RCN_NODES = 200
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.035
-SIGNAL_X_MIN = -5
-SIGNAL_X_MAX = 5
-SIGNAL_Y_MIN = -5
-SIGNAL_Y_MAX = 5
-SIGNAL_Z_MIN = -5
-SIGNAL_Z_MAX = 5
+RCN_CONNECTIVITY = 0.2
+RCN_SPECTRAL_RADIUS = 1.2
+RCN_REGULARIZATION = 1.5
+RCN_LEAKING_RATE = 0.01
+RCN_BIAS = 1.4
 
 # Data windowing settings
 WINDOW = 200
-WINDOW_STEP = 50
+WINDOW_STEP = 190
 START_OFFSET = 0
 END_INDEX = 1200000
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 TEST_RATIO = 0.30
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+my_device = torch_device("cuda" if torch.cuda.is_available() else "cpu")
 
 pid_data_sets = {}
 PIDS = [
@@ -57,61 +57,56 @@ PIDS = [
 ]
 
 
-# HDC Encoder for Bar Crawl Data
-class HDCEncoder(torch.nn.Module):
-    def __init__(self, levels: int, timestamps: int, out_dimension: int):
-        super(HDCEncoder, self).__init__()
+# RCN-HDC Encoder for Bar Crawl Data
+class RcnHdcEncoder(torch.nn.Module):
+    def __init__(self, out_dimension: int):
+        super(RcnHdcEncoder, self).__init__()
+        self.hps = {
+            "n_nodes": NUM_RCN_NODES,
+            "n_inputs": NUM_CHANNELS,
+            "n_outputs": NUM_CHANNELS,
+            "connectivity": RCN_CONNECTIVITY,
+            "spectral_radius": RCN_SPECTRAL_RADIUS,
+            "regularization": RCN_REGULARIZATION,
+            "leaking_rate": RCN_LEAKING_RATE,
+            "bias": RCN_BIAS,
+        }
+        self.rcn = RcNetwork(**self.hps, feedback=True)
+        self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
+        self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
+        self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
 
-        self.signal_level_x = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_X_MIN,
-            high=SIGNAL_X_MAX,
-        )
-        self.signal_level_y = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_Y_MIN,
-            high=SIGNAL_Y_MAX,
-        )
-        self.signal_level_z = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_Z_MIN,
-            high=SIGNAL_Z_MAX,
-        )
         self.channel_basis = embeddings.Random(
-            NUM_CHANNELS, out_dimension, dtype=torch.float64
+            NUM_CHANNELS, out_dimension, device=my_device
         )
-        self.timestamps = embeddings.Thermometer(
-            timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
-        )
+
+    # Generate n x d matrix with orthogonal rows
+    def generate_basis(self, features: int, dimension: int):
+        # Generate random projection n x d matrix M using chosen probability distribution
+        # Hyperdimensionality causes quasi-orthogonality
+        M = np.random.normal(0, 1, (features, dimension))
+        # return n x d matrix as a tensor
+        return torch.tensor(M, device=my_device)
 
     # Encode window of feature vectors (x,y,z)
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        # Get level hypervectors for x, y, z samples
-        x_signal = torch.nn.functional.normalize(input[:, 1], dim=0)
-        y_signal = torch.nn.functional.normalize(input[:, 2], dim=0)
-        z_signal = torch.nn.functional.normalize(input[:, 3], dim=0)
-        x_levels = self.signal_level_x(x_signal)
-        y_levels = self.signal_level_y(y_signal)
-        z_levels = self.signal_level_z(z_signal)
-        # Get time hypervectors
-        times = self.timestamps(input[:, 0])
-        # Bind time sequence for x, y, z samples
-        x_hypervector = torchhd.multiset(torchhd.bind(x_levels, times))
-        y_hypervector = torchhd.multiset(torchhd.bind(y_levels, times))
-        z_hypervector = torchhd.multiset(torchhd.bind(z_levels, times))
+    def forward(self, signals: torch.Tensor) -> torch.Tensor:
+        # Feature extraction from x, y, z samples
+        self.rcn.fit(X=signals[:-1, 1:], y=signals[1:, 1:])
+        x_hypervector = torch.matmul(
+            self.rcn.LinOut.weight.data[0].float(), self.x_basis.float()
+        )
+        y_hypervector = torch.matmul(
+            self.rcn.LinOut.weight.data[1].float(), self.y_basis.float()
+        )
+        z_hypervector = torch.matmul(
+            self.rcn.LinOut.weight.data[2].float(), self.z_basis.float()
+        )
         sample_hvs = torch.stack((x_hypervector, y_hypervector, z_hypervector))
         # Data fusion of channels
         sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
-        sample_hv = torchhd.hard_quantize(sample_hv)
         return sample_hv
 
 
@@ -135,7 +130,7 @@ def load_combined_data():
 
 
 # Run train for a given pid, with provided model and encoder
-def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
+def run_train_for_pid(pid: str, model: models.Centroid, encode: RcnHdcEncoder):
     train_set, _ = pid_data_sets[pid]
 
     # Train using training set half
@@ -144,15 +139,15 @@ def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
             for x, y in tqdm(train_set):
-                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                input_tensor = torch.tensor(x, dtype=torch.float32, device=my_device)
                 input_hypervector = encode(input_tensor)
                 input_hypervector = input_hypervector.unsqueeze(0)
-                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=my_device)
                 label_tensor = label_tensor.unsqueeze(0)
                 model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
 
 
-def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
+def run_test_for_pid(pid: str, model: models.Centroid, encode: RcnHdcEncoder):
     _, test_set = pid_data_sets[pid]
 
     # Test using test set half
@@ -161,14 +156,14 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         "multiclass",
         num_classes=NUM_TAC_LEVELS,
     )
-    accuracy = accuracy.to(device)
+    accuracy = accuracy.to(my_device)
     with torch.no_grad():
         for x, y in tqdm(test_set):
-            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+            query_tensor = torch.tensor(x, dtype=torch.float32, device=my_device)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output).unsqueeze(0).to(device)
-            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+            y_pred = torch.argmax(output).unsqueeze(0).to(my_device)
+            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=my_device)
             label_tensor = label_tensor.unsqueeze(0)
             accuracy.update(y_pred, label_tensor)
 
@@ -179,12 +174,10 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
 # Run a test for a pid, only training using that pid's data
 def run_individual_train_and_test_for_pid(pid: str):
     # Create Centroid model
-    model = models.Centroid(
-        DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
-    )
+    model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, device=my_device)
     # Create Encoder module
-    encode = HDCEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
-    encode = encode.to(device)
+    encode = RcnHdcEncoder(DIMENSIONS)
+    encode = encode.to(my_device)
 
     # Run training
     run_train_for_pid(pid, model, encode)
@@ -198,12 +191,10 @@ def run_individual_train_and_test_for_pid(pid: str):
 # Run a test with all data combined into single data set
 def run_combined_data_train_and_test(train_set, test_set):
     # Create Centroid model
-    model = models.Centroid(
-        DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
-    )
+    model = models.Centroid(DIMENSIONS, NUM_TAC_LEVELS, device=my_device)
     # Create Encoder module
-    encode = HDCEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
-    encode = encode.to(device)
+    encode = RcnHdcEncoder(DIMENSIONS)
+    encode = encode.to(my_device)
 
     # Train using training set half
     print("Begin training")
@@ -211,10 +202,10 @@ def run_combined_data_train_and_test(train_set, test_set):
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
             for x, y in tqdm(train_set):
-                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                input_tensor = torch.tensor(x, dtype=torch.float32, device=my_device)
                 input_hypervector = encode(input_tensor)
                 input_hypervector = input_hypervector.unsqueeze(0)
-                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=my_device)
                 label_tensor = label_tensor.unsqueeze(0)
                 model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
     # Test using test set half
@@ -223,14 +214,14 @@ def run_combined_data_train_and_test(train_set, test_set):
         "multiclass",
         num_classes=NUM_TAC_LEVELS,
     )
-    accuracy = accuracy.to(device)
+    accuracy = accuracy.to(my_device)
     with torch.no_grad():
         for x, y in tqdm(test_set):
-            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+            query_tensor = torch.tensor(x, dtype=torch.float32, device=my_device)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output).unsqueeze(0).to(device)
-            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+            y_pred = torch.argmax(output).unsqueeze(0).to(my_device)
+            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=my_device)
             label_tensor = label_tensor.unsqueeze(0)
             accuracy.update(y_pred, label_tensor)
 
@@ -239,7 +230,7 @@ def run_combined_data_train_and_test(train_set, test_set):
 
 
 if __name__ == "__main__":
-    print("Using {} device".format(device))
+    print("Using {} device".format(my_device))
 
     # Remove 1st argument from the
     # list of command line arguments
@@ -271,7 +262,7 @@ if __name__ == "__main__":
             load_accel_data_full()
             load_all_pid_data()
 
-            with open("hdc_output_single.csv", "w", newline="") as file:
+            with open("rcn_hdc_output_single.csv", "w", newline="") as file:
                 writer = csv.writer(file)
                 for pid in PIDS:
                     accuracy = run_individual_train_and_test_for_pid(pid)
@@ -286,7 +277,7 @@ if __name__ == "__main__":
             train_set, test_set = load_combined_data()
             # Run A test with all data interleaved
             accuracy = run_combined_data_train_and_test(train_set, test_set)
-            with open("hdc_output_combined.csv", "w", newline="") as file:
+            with open("rcn_hdc_output_combined.csv", "w", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerow([accuracy])
                 file.close()
