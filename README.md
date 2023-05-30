@@ -12,14 +12,19 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
 ## Dependencies
 1. Pytorch
     1. I used a CUDA enabled implementation for faster processing
-2. Sklearn
-3. Matplotlib
-4. Torchmetrics
-5. Tqdm
+2. TorchHD
+    1. Library for HDC stuff
+3. Sklearn
+4. Matplotlib
+5. Torchmetrics
+6. Tqdm
     1. For progress bars
+7. RcTorch
+    1. The official RcTorch library for the RCN implementation has bugs with the CUDA mode, so 
+       I fixed them and included the library in this project under rctorch_mod/
+    2. You should still install the official version to get all the dependencies installed
 
-I also included RcTorch for the RCN implementation, but it had bugs with the CUDA mode, so 
-I fixed them and included the library in this project under rctorch_mod/
+You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
 You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
@@ -29,6 +34,7 @@ You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder
 python ./hdc_experiment.py -m <0 or 1>
 ```
 Mode 0 means train on data for individual PIDs
+
 Mode 1 means train on combined set of data
 
 2. To run RCN-HDC experiment, run
