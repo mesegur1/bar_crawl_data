@@ -28,6 +28,7 @@ python ./hdc_experiment.py -m <0 or 1>
 ```
 Mode 0 means train on data for individual PIDs
 Mode 1 means train on combined set of data
+
 2. To run RCN-HDC experiment, run
 ```bash
 python ./rcn_hdc_experiment.py -m <0 or 1>
