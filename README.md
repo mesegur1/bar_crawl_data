@@ -32,6 +32,7 @@ You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder
 python ./hdc_experiment.py -m <0 or 1>
 ```
 Mode 0 means train on data for individual PIDs
+
 Mode 1 means train on combined set of data
 
 2. To run RCN-HDC experiment, run
