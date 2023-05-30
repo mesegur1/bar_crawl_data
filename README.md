@@ -3,18 +3,20 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
 
 ## Current experiments
 1. Pure HDC Experiment
-    (a) Uses purely Hyperdimensional Computing techniques to process timeseries data
+    1. Uses purely Hyperdimensional Computing techniques to process timeseries data.
+    2. Uses raw X,Y,Z features instead of extracting features from the frequency domain
 2. HDC with RCN Experiment
-    (a) Uses a Reservoir Computing Network for timeseries feature extraction for use with HDC techniques of classification
+    1. Uses a Reservoir Computing Network for timeseries feature extraction for use with HDC techniques of classification
+    2. The RCN uses raw X,Y,Z features and converts them to features in the frequency domain for use with HDC
 
 ## Dependencies
 1. Pytorch
-    (a) I used a CUDA enabled implementation for faster processing
+    1. I used a CUDA enabled implementation for faster processing
 2. Sklearn
 3. Matplotlib
 4. Torchmetrics
 5. Tqdm
-    (a) For progress bars
+    1. For progress bars
 
 I also included RcTorch for the RCN implementation, but it had bugs with the CUDA mode, so 
 I fixed them and included the library in this project under rctorch_mod/
@@ -38,28 +40,28 @@ These can drastically change performance.
 
 # Dataset Stuff
 1. Database Description:
-    (a) Title
+    1. Title
         Bar Crawl: Detecting Heavy Drinking
-    (b) Abstract
+    2. Abstract
         Accelerometer and transdermal alcohol content data from a college bar crawl. Used to predict heavy drinking episodes via mobile data.
 
 2. Sources:
-   (a) Owner of database
+   1. Owner of database
        Jackson A Killian (jkillian@g.harvard.edu, Harvard University); Danielle R Madden (University of Southern California); John Clapp (University of Southern California)
-   (b) Donor of database
+   2. Donor of database
        Jackson A Killian (jkillian@g.harvard.edu, Harvard University); Danielle R Madden (University of Southern California); John Clapp (University of Southern California)
-   (c) Date collected
+   3. Date collected
        May 2017
-   (d) Date submitted
+   4. Date submitted
        Jan 2020
 
 3. Past Usage:
-   (a) Complete reference of article where it was described/used: 
+   1. Complete reference of article where it was described/used: 
        Killian, J.A., Passino, K.M., Nandi, A., Madden, D.R. and Clapp, J., Learning to Detect Heavy Drinking Episodes Using Smartphone Accelerometer Data. In Proceedings of the 4th International Workshop on Knowledge Discovery in Healthcare Data co-located with the 28th International Joint Conference on Artificial Intelligence (IJCAI 2019) (pp. 35-42). http://ceur-ws.org/Vol-2429/paper6.pdf
-   (b) Indication of what attribute(s) were being predicted
+   2. Indication of what attribute(s) were being predicted
        Features: Three-axis time series accelerometer data
        Target: Time series transdermal alcohol content (TAC) data (real-time measure of intoxication)
-   (c) Indication of study's results
+   3. Indication of study's results
        The study decomposed each time series into 10 second windows and performed binary classification to predict if windows corresponded to an intoxicated participant (TAC >= 0.08) or sober participant (TAC < 0.08). The study tested several models and achieved a test accuracy of 77.5% with a random forest.
 
 4. Relevant Information:
