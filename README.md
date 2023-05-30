@@ -21,6 +21,8 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
 I also included RcTorch for the RCN implementation, but it had bugs with the CUDA mode, so 
 I fixed them and included the library in this project under rctorch_mod/
 
+You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
+
 ## Run Instructions
 1. To run pure HDC experiment, run
 ```bash
