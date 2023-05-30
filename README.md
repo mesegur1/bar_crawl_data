@@ -10,6 +10,8 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
     2. The RCN uses raw X,Y,Z features and converts them to features in the frequency domain for use with HDC
 
 ## Dependencies
+The following were used with Python 3.10:
+
 1. Pytorch
     1. I used a CUDA enabled implementation for faster processing
 2. TorchHD
@@ -23,8 +25,6 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
     1. The official RcTorch library for the RCN implementation has bugs with the CUDA mode, so 
        I fixed them and included the library in this project under rctorch_mod/
     2. You should still install the official version to get all the dependencies installed
-
-You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
 You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
