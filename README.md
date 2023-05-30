@@ -1,3 +1,42 @@
+# Bar Crawl Data ML Experiments
+ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drinking" by Killian, J. et.al.
+
+## Current experiments
+1. Pure HDC Experiment
+    (a) Uses purely Hyperdimensional Computing techniques to process timeseries data
+2. HDC with RCN Experiment
+    (a) Uses a Reservoir Computing Network for timeseries feature extraction for use with HDC techniques of classification
+
+## Dependencies
+1. Pytorch
+    (a) I used a CUDA enabled implementation for faster processing
+2. Sklearn
+3. Matplotlib
+4. Torchmetrics
+5. Tqdm
+    (a) For progress bars
+
+I also included RcTorch for the RCN implementation, but it had bugs with the CUDA mode, so 
+I fixed them and included the library in this project under rctorch_mod/
+
+## Run Instructions
+1. To run pure HDC experiment, run
+```bash
+python ./hdc_experiment.py -m <0 or 1>
+```
+Mode 0 means train on data for individual PIDs
+Mode 1 means train on combined set of data
+2. To run RCN-HDC experiment, run
+```bash
+python ./rcn_hdc_experiment.py -m <0 or 1>
+```
+
+## Hyperparameters
+Hyperparameters for each implementation are located towards the top of each experiment.py file. 
+These can drastically change performance.
+
+
+# Dataset Stuff
 1. Database Description:
     (a) Title
         Bar Crawl: Detecting Heavy Drinking
