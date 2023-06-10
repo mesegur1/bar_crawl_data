@@ -17,20 +17,19 @@ import getopt, sys
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 6000
-NUM_CHANNELS = 3
-NUM_SIGNAL_LEVELS = 100
+NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
-LEARNING_RATE = 0.035
-SIGNAL_X_MIN = -5
-SIGNAL_X_MAX = 5
-SIGNAL_Y_MIN = -5
-SIGNAL_Y_MAX = 5
-SIGNAL_Z_MIN = -5
-SIGNAL_Z_MAX = 5
+LEARNING_RATE = 0.005
+SIGNAL_X_MIN = -3
+SIGNAL_X_MAX = 3
+SIGNAL_Y_MIN = -3
+SIGNAL_Y_MAX = 3
+SIGNAL_Z_MIN = -3
+SIGNAL_Z_MAX = 3
 
 # Data windowing settings
 WINDOW = 200
-WINDOW_STEP = 50
+WINDOW_STEP = 190
 START_OFFSET = 0
 END_INDEX = 1200000
 TRAINING_EPOCHS = 1
@@ -41,19 +40,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 pid_data_sets = {}
 PIDS = [
-    "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
+    # "BK7610",
+    # "BU4707",
+    # "CC6740",
+    # "DC6359",
+    # "DK3500",
+    # "HV0618",
+    # "JB3156",
+    # "JR8022",
     "MC7070",
     "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
+    # "PC6771",
+    # "SA0297",
+    # "SF3079",
 ]
 
 
@@ -83,35 +82,26 @@ class HDCEncoder(torch.nn.Module):
             low=SIGNAL_Z_MIN,
             high=SIGNAL_Z_MAX,
         )
-        self.channel_basis = embeddings.Random(
-            NUM_CHANNELS, out_dimension, dtype=torch.float64
-        )
-        self.timestamps = embeddings.Thermometer(
+        self.timestamps = embeddings.Level(
             timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
         )
 
     # Encode window of feature vectors (x,y,z)
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # Get level hypervectors for x, y, z samples
-        x_signal = torch.nn.functional.normalize(input[:, 1], dim=0)
-        y_signal = torch.nn.functional.normalize(input[:, 2], dim=0)
-        z_signal = torch.nn.functional.normalize(input[:, 3], dim=0)
+        x_signal = torch.clamp(input[:, 1], min=SIGNAL_X_MIN, max=SIGNAL_X_MAX)
+        y_signal = torch.clamp(input[:, 2], min=SIGNAL_Y_MIN, max=SIGNAL_Y_MAX)
+        z_signal = torch.clamp(input[:, 3], min=SIGNAL_Z_MIN, max=SIGNAL_Z_MAX)
         x_levels = self.signal_level_x(x_signal)
         y_levels = self.signal_level_y(y_signal)
         z_levels = self.signal_level_z(z_signal)
         # Get time hypervectors
-        times = self.timestamps(input[:, 0])
+        times = self.timestamps(input[:, 0] - input[0, 0])
         # Bind time sequence for x, y, z samples
-        x_hypervector = torchhd.multiset(torchhd.bind(x_levels, times))
-        y_hypervector = torchhd.multiset(torchhd.bind(y_levels, times))
-        z_hypervector = torchhd.multiset(torchhd.bind(z_levels, times))
-        sample_hvs = torch.stack((x_hypervector, y_hypervector, z_hypervector))
-        # Data fusion of channels
-        sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
+        sample_hvs = x_levels * y_levels * z_levels * times
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
-        sample_hv = torchhd.hard_quantize(sample_hv)
         return sample_hv
 
 
@@ -140,16 +130,23 @@ def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
 
     # Train using training set half
     print("Begin training with pid %s data" % pid)
-    with torch.no_grad():
-        for e in range(0, TRAINING_EPOCHS):
-            print("Training Epoch %d" % (e))
-            for x, y in tqdm(train_set):
-                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                input_hypervector = encode(input_tensor)
-                input_hypervector = input_hypervector.unsqueeze(0)
-                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
-                label_tensor = label_tensor.unsqueeze(0)
-                model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
+    with open(
+        "data/plot_data/train_data/%s_train_data_downsampled.csv" % pid, "w", newline=""
+    ) as file:
+        writer = csv.writer(file)
+        with torch.no_grad():
+            for e in range(0, TRAINING_EPOCHS):
+                print("Training Epoch %d" % (e))
+                for x, y in tqdm(train_set):
+                    input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                    input_hypervector = encode(input_tensor)
+                    input_hypervector = input_hypervector.unsqueeze(0)
+                    label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                    label_tensor = label_tensor.unsqueeze(0)
+                    model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
+                    writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
+                    file.flush()
+        file.close()
 
 
 def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
@@ -162,15 +159,22 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         num_classes=NUM_TAC_LEVELS,
     )
     accuracy = accuracy.to(device)
-    with torch.no_grad():
-        for x, y in tqdm(test_set):
-            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-            query_hypervector = encode(query_tensor)
-            output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output).unsqueeze(0).to(device)
-            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
-            label_tensor = label_tensor.unsqueeze(0)
-            accuracy.update(y_pred, label_tensor)
+    with open(
+        "data/plot_data/test_data/%s_test_data_downsampled.csv" % pid, "w", newline=""
+    ) as file:
+        writer = csv.writer(file)
+        with torch.no_grad():
+            for x, y in tqdm(test_set):
+                query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                query_hypervector = encode(query_tensor)
+                output = model(query_hypervector, dot=False)
+                y_pred = torch.argmax(output).unsqueeze(0).to(device)
+                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                label_tensor = label_tensor.unsqueeze(0)
+                accuracy.update(y_pred, label_tensor)
+                writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
+                file.flush()
+        file.close()
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     return accuracy.compute().item() * 100
