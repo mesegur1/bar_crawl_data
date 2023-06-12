@@ -28,8 +28,8 @@ SIGNAL_Z_MIN = -3
 SIGNAL_Z_MAX = 3
 
 # Data windowing settings
-WINDOW = 200
-WINDOW_STEP = 190
+WINDOW = 100
+WINDOW_STEP = 50
 START_OFFSET = 0
 END_INDEX = 1200000
 TRAINING_EPOCHS = 1
@@ -40,19 +40,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 pid_data_sets = {}
 PIDS = [
-    # "BK7610",
-    # "BU4707",
-    # "CC6740",
-    # "DC6359",
-    # "DK3500",
-    # "HV0618",
-    # "JB3156",
-    # "JR8022",
+    "BK7610",
+    "BU4707",
+    "CC6740",
+    "DC6359",
+    "DK3500",
+    "HV0618",
+    "JB3156",
+    "JR8022",
     "MC7070",
     "MJ8002",
-    # "PC6771",
-    # "SA0297",
-    # "SF3079",
+    "PC6771",
+    "SA0297",
+    "SF3079",
 ]
 
 
@@ -172,7 +172,9 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
                 label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 accuracy.update(y_pred, label_tensor)
-                writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
+                writer.writerow(
+                    (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1], y_pred.item())
+                )
                 file.flush()
         file.close()
 

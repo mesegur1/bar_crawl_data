@@ -45,6 +45,7 @@ def plot_pid_tac(pid: str):
     plt.xlabel("Time")
     plt.ylabel("TAC Reading")
     plt.savefig("data/plot_data/raw_data_plots/tac_readings_%s.png" % pid)
+    plt.close()
 
 
 def plot_pid_acc(pid: str):
@@ -71,6 +72,7 @@ def plot_pid_acc(pid: str):
     plt.xlabel("Time")
     plt.ylabel("Acc Amount")
     plt.savefig("data/plot_data/raw_data_plots/acc_readings_%s.png" % pid)
+    plt.close()
 
 
 if __name__ == "__main__":
