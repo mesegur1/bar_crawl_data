@@ -21,12 +21,12 @@ DIMENSIONS = 6000
 NUM_CHANNELS = 3
 NUM_RCN_NODES = 200
 NUM_TAC_LEVELS = 2
-LEARNING_RATE = 0.035
-RCN_CONNECTIVITY = 0.2
+LEARNING_RATE = 0.05
+RCN_CONNECTIVITY = 0.4
 RCN_SPECTRAL_RADIUS = 1.2
-RCN_REGULARIZATION = 1.5
+RCN_REGULARIZATION = 1.7
 RCN_LEAKING_RATE = 0.01
-RCN_BIAS = 1.4
+RCN_BIAS = 0.49
 
 # Data windowing settings
 WINDOW = 200
@@ -76,10 +76,6 @@ class RcnHdcEncoder(torch.nn.Module):
         self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
 
-        self.channel_basis = embeddings.Random(
-            NUM_CHANNELS, out_dimension, device=my_device
-        )
-
     # Generate n x d matrix with orthogonal rows
     def generate_basis(self, features: int, dimension: int):
         # Generate random projection n x d matrix M using chosen probability distribution
@@ -103,10 +99,10 @@ class RcnHdcEncoder(torch.nn.Module):
         )
         sample_hvs = torch.stack((x_hypervector, y_hypervector, z_hypervector))
         # Data fusion of channels
-        sample_hvs = torchhd.bind(self.channel_basis.weight, sample_hvs)
-        sample_hv = torchhd.multiset(sample_hvs)
+        sample_hv = torchhd.multiset(sample_hvs) + torchhd.multibind(sample_hvs)
         # Apply activation function
         sample_hv = torch.tanh(sample_hv)
+        sample_hv = torchhd.hard_quantize(sample_hv)
         return sample_hv
 
 

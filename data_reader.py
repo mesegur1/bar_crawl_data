@@ -149,7 +149,7 @@ def load_data(
     global accel_data_full
     print("Reading in Data for person %s" % (pid))
     tac_data = []
-    with open("data/clean_tac/" + pid + "_clean_TAC.csv", "r", newline="") as file:
+    with open("data/clean_tac/%s_clean_TAC.csv" % pid, "r", newline="") as file:
         reader = csv.reader(file)
         next(reader)
         for row in reader:
@@ -194,13 +194,23 @@ def load_data(
     tac_data_labels = []
     i = 0
     j = 0
+    if accel_data[0][0] > tac_data[0][0]:
+        # Cut off data before start of Accel data
+        while j < tac_data_length and accel_data[0][0] > tac_data[j][0]:
+            j += 1
+    elif accel_data[0][0] < tac_data[0][0]:
+        # Cut off data before start of TAC data
+        while i < accel_data_length and accel_data[i][0] < tac_data[0][0]:
+            i += 1
+    tac_data_labels.append(tac_data[j][1])
+    acc_new_start = i
     while i < accel_data_length and j < tac_data_length:
         if accel_data[i][0] < tac_data[j][0]:
             tac_data_labels.append(tac_data[j][1])
         else:
             j = j + 1  # Move to next TAC entry
         i = i + 1  # Go to next accel data
-    accel_data = accel_data[0 : len(tac_data_labels)]
+    accel_data = accel_data[acc_new_start : acc_new_start + len(tac_data_labels)]
     print("Total Data length: %d" % (len(tac_data_labels)))
 
     print("Creating data sets")
