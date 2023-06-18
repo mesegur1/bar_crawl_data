@@ -3,13 +3,14 @@ import torch
 import numpy as np
 import torchhd
 from torchhd import embeddings
-from torchhd import models
+from torchhd_custom import models  # from torchhd import models
 from data_reader import load_data
 from data_reader import load_data_combined
 from data_reader import load_accel_data_full
 import torchmetrics
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
+from sklearn.metrics import f1_score
 from tqdm import tqdm
 import csv
 import getopt, sys
@@ -19,7 +20,7 @@ import getopt, sys
 DIMENSIONS = 6000
 NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
-LEARNING_RATE = 0.005
+LEARNING_RATE = 0.8
 SIGNAL_X_MIN = -3
 SIGNAL_X_MAX = 3
 SIGNAL_Y_MIN = -3
@@ -143,7 +144,9 @@ def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
                     input_hypervector = input_hypervector.unsqueeze(0)
                     label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
                     label_tensor = label_tensor.unsqueeze(0)
-                    model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
+                    model.add_adjust_iterative(
+                        input_hypervector, label_tensor, lr=LEARNING_RATE
+                    )
                     writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
                     file.flush()
         file.close()
@@ -163,6 +166,8 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         "data/plot_data/test_data/%s_test_data_downsampled.csv" % pid, "w", newline=""
     ) as file:
         writer = csv.writer(file)
+        y_true = []
+        preds = []
         with torch.no_grad():
             for x, y in tqdm(test_set):
                 query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
@@ -172,6 +177,8 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
                 label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 accuracy.update(y_pred, label_tensor)
+                preds.append(y_pred.item())
+                y_true.append(label_tensor.item())
                 writer.writerow(
                     (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1], y_pred.item())
                 )
@@ -179,7 +186,9 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         file.close()
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    return accuracy.compute().item() * 100
+    f1 = f1_score(y_true, preds, zero_division=1)
+    print(f"Testing F1 Score of model is {(f1):.3f}")
+    return (accuracy.compute().item() * 100, f1)
 
 
 # Run a test for a pid, only training using that pid's data
@@ -222,7 +231,9 @@ def run_combined_data_train_and_test(train_set, test_set):
                 input_hypervector = input_hypervector.unsqueeze(0)
                 label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
-                model.add_online(input_hypervector, label_tensor, lr=LEARNING_RATE)
+                model.add_adjust_iterative(
+                    input_hypervector, label_tensor, lr=LEARNING_RATE
+                )
     # Test using test set half
     print("Begin Predicting")
     accuracy = torchmetrics.Accuracy(
@@ -230,6 +241,8 @@ def run_combined_data_train_and_test(train_set, test_set):
         num_classes=NUM_TAC_LEVELS,
     )
     accuracy = accuracy.to(device)
+    y_true = []
+    preds = []
     with torch.no_grad():
         for x, y in tqdm(test_set):
             query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
@@ -239,9 +252,13 @@ def run_combined_data_train_and_test(train_set, test_set):
             label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
             label_tensor = label_tensor.unsqueeze(0)
             accuracy.update(y_pred, label_tensor)
+            preds.append(y_pred.item())
+            y_true.append(label_tensor.item())
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    return accuracy.compute().item() * 100
+    f1 = f1_score(y_true, preds, zero_division=1)
+    print(f"Testing F1 Score of model is {(f1):.3f}")
+    return (accuracy.compute().item() * 100, f1)
 
 
 if __name__ == "__main__":
@@ -280,8 +297,8 @@ if __name__ == "__main__":
             with open("hdc_output_single.csv", "w", newline="") as file:
                 writer = csv.writer(file)
                 for pid in PIDS:
-                    accuracy = run_individual_train_and_test_for_pid(pid)
-                    writer.writerow([pid, accuracy])
+                    accuracy, f1 = run_individual_train_and_test_for_pid(pid)
+                    writer.writerow([pid, accuracy, f1])
                     file.flush()
                 file.close()
             print("All tests done")
@@ -291,10 +308,10 @@ if __name__ == "__main__":
             load_accel_data_full()
             train_set, test_set = load_combined_data()
             # Run A test with all data interleaved
-            accuracy = run_combined_data_train_and_test(train_set, test_set)
+            accuracy, f1 = run_combined_data_train_and_test(train_set, test_set)
             with open("hdc_output_combined.csv", "w", newline="") as file:
                 writer = csv.writer(file)
-                writer.writerow([accuracy])
+                writer.writerow([accuracy, f1])
                 file.close()
             print("Test done")
 
