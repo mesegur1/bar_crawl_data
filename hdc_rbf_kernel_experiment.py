@@ -21,7 +21,7 @@ import getopt, sys
 DIMENSIONS = 6000
 NUM_CHANNEL = 3
 NUM_TAC_LEVELS = 2
-LEARNING_RATE = 0.2
+LEARNING_RATE = 0.8
 
 # Type of kernel trick
 USE_TANH = True
