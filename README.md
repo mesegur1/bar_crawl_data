@@ -5,7 +5,10 @@ ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drink
 1. Pure HDC Experiment
     1. Uses purely Hyperdimensional Computing techniques to process timeseries data.
     2. Uses raw X,Y,Z features instead of extracting features from the frequency domain
-2. HDC with RCN Experiment
+2. Pure HDC Experiment with RBF Kernel Encoder Trick
+    1. Uses purely Hyperdimensional Computing techniques along with kernel trick to mimic RBF kernel
+    2. Uses raw X,Y,Z features instead of extracting features from the frequency domain
+3. HDC with RCN Experiment
     1. Uses a Reservoir Computing Network for timeseries feature extraction for use with HDC techniques of classification
     2. The RCN uses raw X,Y,Z features and converts them to features in the frequency domain for use with HDC
 
@@ -37,7 +40,12 @@ Mode 0 means train on data for individual PIDs
 
 Mode 1 means train on combined set of data
 
-2. To run RCN-HDC experiment, run
+2. To run HDC-RBF experiment, run
+```bash
+python ./hdc_rbf_experiment.py -m <0 or 1>
+```
+
+3. To run RCN-HDC experiment, run
 ```bash
 python ./rcn_hdc_experiment.py -m <0 or 1>
 ```
