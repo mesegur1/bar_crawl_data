@@ -5,7 +5,6 @@ import torchhd
 from torchhd import embeddings
 from torchhd_custom import models  # from torchhd import models
 from data_reader import load_data
-from data_reader import load_data_combined
 from data_reader import load_accel_data_full
 import torchmetrics
 import matplotlib.pyplot as plt
@@ -32,7 +31,7 @@ SIGNAL_Z_MAX = 3
 WINDOW = 100
 WINDOW_STEP = 50
 START_OFFSET = 0
-END_INDEX = 1200000
+END_INDEX = 12000000
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 TEST_RATIO = 0.30
@@ -116,25 +115,41 @@ def load_all_pid_data():
         pid_data_sets[pid] = (train_set, test_set)
 
 
-# Get entire combined data set
-def load_combined_data():
-    # Load data from CSVs
-    train_set, test_set = load_data_combined(
-        WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
-    )
-    return (train_set, test_set)
-
-
 # Run train for a given pid, with provided model and encoder
-def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
+def run_train_for_pid(
+    pid: str, model: models.Centroid, encode: HDCEncoder, write_file: bool = True
+):
     train_set, _ = pid_data_sets[pid]
 
     # Train using training set half
     print("Begin training with pid %s data" % pid)
-    with open(
-        "data/plot_data/train_data/%s_train_data_downsampled.csv" % pid, "w", newline=""
-    ) as file:
-        writer = csv.writer(file)
+    if write_file == True:
+        with open(
+            "data/plot_data/train_data/%s_train_data_downsampled.csv" % pid,
+            "w",
+            newline="",
+        ) as file:
+            writer = csv.writer(file)
+            with torch.no_grad():
+                for e in range(0, TRAINING_EPOCHS):
+                    print("Training Epoch %d" % (e))
+                    for x, y in tqdm(train_set):
+                        input_tensor = torch.tensor(
+                            x, dtype=torch.float64, device=device
+                        )
+                        input_hypervector = encode(input_tensor)
+                        input_hypervector = input_hypervector.unsqueeze(0)
+                        label_tensor = torch.tensor(
+                            y[-1], dtype=torch.int64, device=device
+                        )
+                        label_tensor = label_tensor.unsqueeze(0)
+                        model.add_adjust_iterative(
+                            input_hypervector, label_tensor, lr=LEARNING_RATE
+                        )
+                        writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
+                        file.flush()
+            file.close()
+    else:
         with torch.no_grad():
             for e in range(0, TRAINING_EPOCHS):
                 print("Training Epoch %d" % (e))
@@ -147,12 +162,11 @@ def run_train_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
                     model.add_adjust_iterative(
                         input_hypervector, label_tensor, lr=LEARNING_RATE
                     )
-                    writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
-                    file.flush()
-        file.close()
 
 
-def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
+def run_test_for_pid(
+    pid: str, model: models.Centroid, encode: HDCEncoder, write_file: bool = True
+):
     _, test_set = pid_data_sets[pid]
 
     # Test using test set half
@@ -162,10 +176,32 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
         num_classes=NUM_TAC_LEVELS,
     )
     accuracy = accuracy.to(device)
-    with open(
-        "data/plot_data/test_data/%s_test_data_downsampled.csv" % pid, "w", newline=""
-    ) as file:
-        writer = csv.writer(file)
+    if write_file == True:
+        with open(
+            "data/plot_data/test_data/%s_test_data_downsampled.csv" % pid,
+            "w",
+            newline="",
+        ) as file:
+            writer = csv.writer(file)
+            y_true = []
+            preds = []
+            with torch.no_grad():
+                for x, y in tqdm(test_set):
+                    query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                    query_hypervector = encode(query_tensor)
+                    output = model(query_hypervector, dot=False)
+                    y_pred = torch.argmax(output).unsqueeze(0).to(device)
+                    label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                    label_tensor = label_tensor.unsqueeze(0)
+                    accuracy.update(y_pred, label_tensor)
+                    preds.append(y_pred.item())
+                    y_true.append(label_tensor.item())
+                    writer.writerow(
+                        (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1], y_pred.item())
+                    )
+                    file.flush()
+            file.close()
+    else:
         y_true = []
         preds = []
         with torch.no_grad():
@@ -179,11 +215,6 @@ def run_test_for_pid(pid: str, model: models.Centroid, encode: HDCEncoder):
                 accuracy.update(y_pred, label_tensor)
                 preds.append(y_pred.item())
                 y_true.append(label_tensor.item())
-                writer.writerow(
-                    (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1], y_pred.item())
-                )
-                file.flush()
-        file.close()
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     f1 = f1_score(y_true, preds, zero_division=1)
@@ -219,46 +250,6 @@ def run_combined_data_train_and_test(train_set, test_set):
     # Create Encoder module
     encode = HDCEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
     encode = encode.to(device)
-
-    # Train using training set half
-    print("Begin training")
-    with torch.no_grad():
-        for e in range(0, TRAINING_EPOCHS):
-            print("Training Epoch %d" % (e))
-            for x, y in tqdm(train_set):
-                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                input_hypervector = encode(input_tensor)
-                input_hypervector = input_hypervector.unsqueeze(0)
-                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
-                label_tensor = label_tensor.unsqueeze(0)
-                model.add_adjust_iterative(
-                    input_hypervector, label_tensor, lr=LEARNING_RATE
-                )
-    # Test using test set half
-    print("Begin Predicting")
-    accuracy = torchmetrics.Accuracy(
-        "multiclass",
-        num_classes=NUM_TAC_LEVELS,
-    )
-    accuracy = accuracy.to(device)
-    y_true = []
-    preds = []
-    with torch.no_grad():
-        for x, y in tqdm(test_set):
-            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-            query_hypervector = encode(query_tensor)
-            output = model(query_hypervector, dot=False)
-            y_pred = torch.argmax(output).unsqueeze(0).to(device)
-            label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
-            label_tensor = label_tensor.unsqueeze(0)
-            accuracy.update(y_pred, label_tensor)
-            preds.append(y_pred.item())
-            y_true.append(label_tensor.item())
-
-    print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    f1 = f1_score(y_true, preds, zero_division=1)
-    print(f"Testing F1 Score of model is {(f1):.3f}")
-    return (accuracy.compute().item() * 100, f1)
 
 
 if __name__ == "__main__":
@@ -304,15 +295,7 @@ if __name__ == "__main__":
             print("All tests done")
         elif mode == 1:
             print("Combined-Train, Combined-Test Mode")
-            # Load datasets in windowed format
-            load_accel_data_full()
-            train_set, test_set = load_combined_data()
-            # Run A test with all data interleaved
-            accuracy, f1 = run_combined_data_train_and_test(train_set, test_set)
-            with open("hdc_output_combined.csv", "w", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow([accuracy, f1])
-                file.close()
+            print("TODO")
             print("Test done")
 
     except getopt.error as err:

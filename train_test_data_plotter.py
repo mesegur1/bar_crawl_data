@@ -72,6 +72,70 @@ def plot_pid_test(pid: str):
     plt.close()
 
 
+def plot_combined_train():
+    print("Plotting Combined Train Data")
+    train_data = []
+    with open(
+        "data/plot_data/train_data/combined_train_data_downsampled.csv", "r", newline=""
+    ) as file:
+        reader = csv.reader(file)
+        next(reader)
+        for row in reader:
+            train_data.append(row)
+        file.close()
+
+    plot_x = [int(float(v[0])) for v in train_data]
+    plot_y_x = [float(v[1]) for v in train_data]
+    plot_y_y = [float(v[2]) for v in train_data]
+    plot_y_z = [float(v[3]) for v in train_data]
+    plot_y_tag = [int(float(v[4])) for v in train_data]
+
+    plot_fig = plt.figure()
+    plt.plot(plot_x, plot_y_x, label="X")
+    plt.plot(plot_x, plot_y_y, label="Y")
+    plt.plot(plot_x, plot_y_z, label="Z")
+    plt.plot(plot_x, plot_y_tag, label="Tag")
+    plt.legend()
+    plt.title("Combined Train Data")
+    plt.xlabel("Time")
+    plt.ylabel("Values")
+    plt.savefig("data/plot_data/train_data/train_data_combined.png")
+    plt.close()
+
+
+def plot_combined_test():
+    print("Plotting Combined Test Data")
+    train_data = []
+    with open(
+        "data/plot_data/test_data/combined_test_data_downsampled.csv", "r", newline=""
+    ) as file:
+        reader = csv.reader(file)
+        next(reader)
+        for row in reader:
+            train_data.append(row)
+        file.close()
+
+    plot_x = [int(float(v[0])) for v in train_data]
+    plot_y_x = [float(v[1]) for v in train_data]
+    plot_y_y = [float(v[2]) for v in train_data]
+    plot_y_z = [float(v[3]) for v in train_data]
+    plot_y_tag = [int(float(v[4])) for v in train_data]
+    plot_y_pred = [int(float(v[5])) for v in train_data]
+
+    plot_fig = plt.figure()
+    plt.plot(plot_x, plot_y_x, label="X")
+    plt.plot(plot_x, plot_y_y, label="Y")
+    plt.plot(plot_x, plot_y_z, label="Z")
+    plt.plot(plot_x, plot_y_tag, label="Tag")
+    plt.plot(plot_x, plot_y_pred, label="Tag Pred")
+    plt.legend()
+    plt.title("Combined Test Data")
+    plt.xlabel("Time")
+    plt.ylabel("Values")
+    plt.savefig("data/plot_data/test_data/test_data_combined.png")
+    plt.close()
+
+
 if __name__ == "__main__":
     PIDS = [
         "BK7610",
@@ -89,7 +153,9 @@ if __name__ == "__main__":
         "SF3079",
     ]
 
-    for pid in PIDS:
-        plot_pid_train(pid)
-        plot_pid_test(pid)
+    # for pid in PIDS:
+    #     plot_pid_train(pid)
+    #     plot_pid_test(pid)
+    plot_combined_train()
+    plot_combined_test()
     print("Done")
