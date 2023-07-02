@@ -32,26 +32,33 @@ The following were used with Python 3.10:
 You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
 ## Run Instructions
-1. To run pure HDC experiment, run
+1. To run a HDC experiment, run
 ```bash
-python ./hdc_experiment.py -m <0 or 1>
+python ./hdc_experiment.py -m <0, 1, 2>
 ```
-Mode 0 means train on data for individual PIDs
+Mode 0 means train on individual PIDs using level hypervector encoding
 
-Mode 1 means train on combined set of data
+Mode 1 means train on individual PIDs using RBF kernel trick encoding
 
-2. To run HDC-RBF experiment, run
+Mode 2 means train on individual PIDs using RCN feature extraction encoding (Note: this test takes a long time)
+
+## Data Plotter Instructions
+1. To plot TAC and accelerometer input data for each PID, run
 ```bash
-python ./hdc_rbf_experiment.py -m <0 or 1>
+python ./tac_data_plotter.py
 ```
+Data plots will be written to ```./data/plot_data```
 
-3. To run RCN-HDC experiment, run
+2. After running an experiment, to see plots of the data used for train and test, as well as the output and expected labels, run
 ```bash
-python ./rcn_hdc_experiment.py -m <0 or 1>
+python ./train_test_plotter.py
 ```
+Test data plots will be written to ```./data/test_data```
+
+Train data plots will be written to ```./data/train_data```
 
 ## Hyperparameters
-Hyperparameters for each implementation are located towards the top of each experiment.py file. 
+Hyperparameters for each implementation are located towards the top of hdc_experiment.py file and encoder class files.
 These can drastically change performance.
 
 
