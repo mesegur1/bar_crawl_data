@@ -4,6 +4,9 @@ import numpy as np
 import torchhd
 from torchhd import embeddings
 from torchhd_custom import models  # from torchhd import models
+from encoders import HdcLevelEncoder
+from encoders import HdcRbfEncoder
+from encoders import RcnHdcEncoder
 from data_reader import load_data
 from data_reader import load_accel_data_full
 import torchmetrics
@@ -20,12 +23,6 @@ DIMENSIONS = 6000
 NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
-SIGNAL_X_MIN = -3
-SIGNAL_X_MAX = 3
-SIGNAL_Y_MIN = -3
-SIGNAL_Y_MAX = 3
-SIGNAL_Z_MIN = -3
-SIGNAL_Z_MAX = 3
 
 # Data windowing settings
 WINDOW = 100
@@ -35,6 +32,26 @@ END_INDEX = 12000000
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 TEST_RATIO = 0.30
+
+# Encoder options
+USE_LEVEL_ENCODER = 0
+USE_RBF_ENCODER = 1
+USE_RCN_ENCODER = 2
+
+
+def encoder_mode_str(mode: int):
+    if mode == USE_LEVEL_ENCODER:
+        return "level"
+    elif mode == USE_RBF_ENCODER:
+        return "rbf"
+    elif mode == USE_RCN_ENCODER:
+        return "rcn"
+    else:
+        return "unknown"
+
+
+# Option for RBF encoder
+USE_TANH = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -56,55 +73,6 @@ PIDS = [
 ]
 
 
-# HDC Encoder for Bar Crawl Data
-class HDCEncoder(torch.nn.Module):
-    def __init__(self, levels: int, timestamps: int, out_dimension: int):
-        super(HDCEncoder, self).__init__()
-
-        self.signal_level_x = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_X_MIN,
-            high=SIGNAL_X_MAX,
-        )
-        self.signal_level_y = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_Y_MIN,
-            high=SIGNAL_Y_MAX,
-        )
-        self.signal_level_z = embeddings.Level(
-            levels,
-            out_dimension,
-            dtype=torch.float64,
-            low=SIGNAL_Z_MIN,
-            high=SIGNAL_Z_MAX,
-        )
-        self.timestamps = embeddings.Level(
-            timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
-        )
-
-    # Encode window of feature vectors (x,y,z)
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        # Get level hypervectors for x, y, z samples
-        x_signal = torch.clamp(input[:, 1], min=SIGNAL_X_MIN, max=SIGNAL_X_MAX)
-        y_signal = torch.clamp(input[:, 2], min=SIGNAL_Y_MIN, max=SIGNAL_Y_MAX)
-        z_signal = torch.clamp(input[:, 3], min=SIGNAL_Z_MIN, max=SIGNAL_Z_MAX)
-        x_levels = self.signal_level_x(x_signal)
-        y_levels = self.signal_level_y(y_signal)
-        z_levels = self.signal_level_z(z_signal)
-        # Get time hypervectors
-        times = self.timestamps(input[:, 0] - input[0, 0])
-        # Bind time sequence for x, y, z samples
-        sample_hvs = x_levels * y_levels * z_levels * times
-        sample_hv = torchhd.multiset(sample_hvs)
-        # Apply activation function
-        sample_hv = torch.tanh(sample_hv)
-        return sample_hv
-
-
 # Load all data for each pid
 def load_all_pid_data():
     for pid in PIDS:
@@ -117,7 +85,7 @@ def load_all_pid_data():
 
 # Run train for a given pid, with provided model and encoder
 def run_train_for_pid(
-    pid: str, model: models.Centroid, encode: HDCEncoder, write_file: bool = True
+    pid: str, model: models.Centroid, encode: torch.nn.Module, write_file: bool = True
 ):
     train_set, _ = pid_data_sets[pid]
 
@@ -165,7 +133,7 @@ def run_train_for_pid(
 
 
 def run_test_for_pid(
-    pid: str, model: models.Centroid, encode: HDCEncoder, write_file: bool = True
+    pid: str, model: models.Centroid, encode: torch.nn.Module, write_file: bool = True
 ):
     _, test_set = pid_data_sets[pid]
 
@@ -223,13 +191,18 @@ def run_test_for_pid(
 
 
 # Run a test for a pid, only training using that pid's data
-def run_individual_train_and_test_for_pid(pid: str):
+def run_individual_train_and_test_for_pid(pid: str, encoder_option: int):
     # Create Centroid model
     model = models.Centroid(
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
     )
     # Create Encoder module
-    encode = HDCEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+    if encoder_option == USE_LEVEL_ENCODER:
+        encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+    elif encoder_option == USE_RBF_ENCODER:
+        encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
+    elif encoder_option == USE_RCN_ENCODER:
+        encode = RcnHdcEncoder.RcnHdcEncoder(SAMPLE_RATE, DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
@@ -241,17 +214,6 @@ def run_individual_train_and_test_for_pid(pid: str):
     return accuracy
 
 
-# Run a test with all data combined into single data set
-def run_combined_data_train_and_test(train_set, test_set):
-    # Create Centroid model
-    model = models.Centroid(
-        DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
-    )
-    # Create Encoder module
-    encode = HDCEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
-    encode = encode.to(device)
-
-
 if __name__ == "__main__":
     print("Using {} device".format(device))
 
@@ -260,10 +222,10 @@ if __name__ == "__main__":
     argumentList = sys.argv[1:]
 
     # Options
-    options = "m:"
+    options = "e:"
 
     # Long options
-    long_options = ["Mode="]
+    long_options = ["Encoder="]
 
     try:
         # Parsing argument
@@ -271,32 +233,33 @@ if __name__ == "__main__":
         mode = 0
         # Checking each argument
         for currentArgument, currentValue in arguments:
-            if currentArgument in ("-m", "--Mode"):
+            if currentArgument in ("-e", "--Encoder"):
                 if currentValue == str(0):
                     mode = 0
                 elif currentValue == str(1):
                     mode = 1
+                elif currentValue == str(2):
+                    mode = 2
                 else:
                     mode = 0
 
-        if mode == 0:
-            print("Single-Train, Single-Test Mode")
-            # Load datasets in windowed format
-            load_accel_data_full()
-            load_all_pid_data()
+        print(
+            "Single-PID-Train, Single-PID-Test for %s encoder" % encoder_mode_str(mode)
+        )
+        # Load datasets in windowed format
+        load_accel_data_full()
+        load_all_pid_data()
 
-            with open("hdc_output_single.csv", "w", newline="") as file:
-                writer = csv.writer(file)
-                for pid in PIDS:
-                    accuracy, f1 = run_individual_train_and_test_for_pid(pid)
-                    writer.writerow([pid, accuracy, f1])
-                    file.flush()
-                file.close()
-            print("All tests done")
-        elif mode == 1:
-            print("Combined-Train, Combined-Test Mode")
-            print("TODO")
-            print("Test done")
+        with open(
+            "results/hdc_output_single_%s.csv" % encoder_mode_str(mode), "w", newline=""
+        ) as file:
+            writer = csv.writer(file)
+            for pid in PIDS:
+                accuracy, f1 = run_individual_train_and_test_for_pid(pid, mode)
+                writer.writerow([pid, accuracy, f1])
+                file.flush()
+            file.close()
+        print("All tests done")
 
     except getopt.error as err:
         # output error, and return with an error code
