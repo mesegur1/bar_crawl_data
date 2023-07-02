@@ -5,16 +5,16 @@ import torchhd
 
 NUM_CHANNELS = 3
 NUM_RCN_NODES = 100
-RCN_CONNECTIVITY = 0.2
+RCN_CONNECTIVITY = 0.1
 RCN_SPECTRAL_RADIUS = 1.0
 RCN_REGULARIZATION = 1.3
-RCN_LEAKING_RATE = 0.09
+RCN_LEAKING_RATE = 0.12
 RCN_BIAS = 0.49
 
 
 # RCN-HDC Encoder for Bar Crawl Data
 class RcnHdcEncoder(torch.nn.Module):
-    def __init__(self, sample_rate: float, out_dimension: int):
+    def __init__(self, out_dimension: int):
         super(RcnHdcEncoder, self).__init__()
         self.hps = {
             "n_nodes": NUM_RCN_NODES,
@@ -25,7 +25,6 @@ class RcnHdcEncoder(torch.nn.Module):
             "regularization": RCN_REGULARIZATION,
             "leaking_rate": RCN_LEAKING_RATE,
             "bias": RCN_BIAS,
-            "dt": float(1.0 / sample_rate),
         }
 
         self.my_device = torch_device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,10 +43,16 @@ class RcnHdcEncoder(torch.nn.Module):
 
     # Encode window of feature vectors (x,y,z)
     def forward(self, signals: torch.Tensor) -> torch.Tensor:
-        if signals.size(dim=0) > 0 and signals.size(dim=1) > NUM_CHANNELS:
+        if (
+            signals.dim() == 2
+            and signals.size(dim=0) > 2
+            and signals.size(dim=1) == NUM_CHANNELS + 1
+        ):
             # Feature extraction from x, y, z samples
             signals = signals.float()  # RCN class works with float32
+            # Fit RCN to timeseries to get weights
             self.rcn.fit(X=signals[:-1, 1:], y=signals[1:, 1:])
+            # Convert weights to hypervectors
             x_hypervector = torch.matmul(
                 self.rcn.LinOut.weight.data[0].float(), self.x_basis.float()
             )

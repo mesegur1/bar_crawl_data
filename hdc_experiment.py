@@ -202,7 +202,7 @@ def run_individual_train_and_test_for_pid(pid: str, encoder_option: int):
     elif encoder_option == USE_RBF_ENCODER:
         encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
     elif encoder_option == USE_RCN_ENCODER:
-        encode = RcnHdcEncoder.RcnHdcEncoder(SAMPLE_RATE, DIMENSIONS)
+        encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
