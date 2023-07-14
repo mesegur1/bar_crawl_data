@@ -31,6 +31,7 @@ START_OFFSET = 0
 END_INDEX = 12000000
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
+RCN_SAMPLE_RATE = 5
 TEST_RATIO = 0.30
 
 # Encoder options
@@ -74,11 +75,15 @@ PIDS = [
 
 
 # Load all data for each pid
-def load_all_pid_data():
+def load_all_pid_data(mode: int):
+    sample_rate = SAMPLE_RATE
+    if mode == 2:
+        # Lower sample rate for RCN encoder
+        sample_rate = RCN_SAMPLE_RATE
     for pid in PIDS:
         # Load data from CSVs
         train_set, test_set = load_data(
-            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
+            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
         )
         pid_data_sets[pid] = (train_set, test_set)
 
@@ -248,7 +253,7 @@ if __name__ == "__main__":
         )
         # Load datasets in windowed format
         load_accel_data_full()
-        load_all_pid_data()
+        load_all_pid_data(mode)
 
         with open(
             "results/hdc_output_single_%s.csv" % encoder_mode_str(mode), "w", newline=""
