@@ -3,15 +3,18 @@ import numpy as np
 import torchhd
 from torchhd import embeddings
 
-SIGNAL_X_MIN = -3
-SIGNAL_X_MAX = 3
-SIGNAL_Y_MIN = -3
-SIGNAL_Y_MAX = 3
-SIGNAL_Z_MIN = -3
-SIGNAL_Z_MAX = 3
+SIGNAL_X_MIN = -5
+SIGNAL_X_MAX = 5
+SIGNAL_Y_MIN = -5
+SIGNAL_Y_MAX = 5
+SIGNAL_Z_MIN = -5
+SIGNAL_Z_MAX = 5
 
-MAG_SIGNAL_MIN = -3
-MAG_SIGNAL_MAX = 3
+MAG_SIGNAL_MIN = -10
+MAG_SIGNAL_MAX = 10
+
+ENERGY_SIGNAL_MIN = -10
+ENERGY_SIGNAL_MAX = 10
 
 
 # HDC Encoder for Bar Crawl Data
@@ -82,17 +85,32 @@ class HdcLevelEncoder(torch.nn.Module):
             high=MAG_SIGNAL_MAX,
         )
 
+        self.signal_level_energy = embeddings.Level(
+            levels,
+            out_dimension,
+            dtype=torch.float64,
+            low=ENERGY_SIGNAL_MIN,
+            high=ENERGY_SIGNAL_MAX,
+        )
+
     # Calculate magnitudes of signals
     def calc_mags(self, xyz: torch.Tensor):
         sq = torch.square(xyz)
         # Sum of squares of each component
         mags = torch.sqrt(torch.sum(sq, dim=1))
         return mags  # Magnitude signal samples
+    
+    # Calculate energy of signals
+    def calc_energy(self, xyz: torch.Tensor):
+        n = xyz.shape[0]
+        sq = torch.square(xyz)
+        energy = torch.sum(sq, dim=1) / max(n, 1)
+        return energy
 
     # Calculate jerk of signals
     def calc_jerk(self, txyz: torch.Tensor):
         n = txyz.shape[0]
-        jerks = torch.zeros((1, 3), device="cuda")
+        jerks = torch.zeros((1, 3), device="cuda", dtype=torch.float64)
         for i in range(n - 1):
             t0 = txyz[i, 0]
             t1 = txyz[i + 1, 0]
@@ -124,14 +142,14 @@ class HdcLevelEncoder(torch.nn.Module):
         y_jerk_levels = self.signal_level_y_jerk(y_jerk_signal)
         z_jerk_levels = self.signal_level_z_jerk(z_jerk_signal)
         jerk_mag_levels = self.signal_level_mag_jerk(self.calc_mags(jerk))
-
+        # Get energy
+        energy_levels = self.signal_level_energy(self.calc_energy(input[:, 1:]))
         # Get time hypervectors
         times = self.timestamps(input[:, 0])
         # Bind time sequence for x, y, z samples
-        # sample_hvs = x_levels * y_levels * z_levels * times
         sample_hvs = (
-            (x_levels + y_levels + z_levels) * mag_levels
-            + (x_jerk_levels + y_jerk_levels + z_jerk_levels) * jerk_mag_levels
+            (x_levels * y_levels * z_levels) * mag_levels * energy_levels
+            + (x_jerk_levels * y_jerk_levels * z_jerk_levels) * jerk_mag_levels
         ) * times
         sample_hv = torchhd.multiset(sample_hvs)
         # Apply activation function
