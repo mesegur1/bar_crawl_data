@@ -22,7 +22,10 @@ class HdcRbfEncoder(torch.nn.Module):
                 timestamps * 3, out_dimension, dtype=torch.float64
             )
             self.kernel3 = embeddings.HyperTangent(
-                timestamps * 3, out_dimension, dtype=torch.float64
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel4 = embeddings.HyperTangent(
+                3, out_dimension, dtype=torch.float64
             )
         else:
             self.kernel1 = embeddings.Sinusoid(
@@ -32,8 +35,9 @@ class HdcRbfEncoder(torch.nn.Module):
                 timestamps * 3, out_dimension, dtype=torch.float64
             )
             self.kernel3 = embeddings.Sinusoid(
-                timestamps * 3, out_dimension, dtype=torch.float64
+                timestamps * 2, out_dimension, dtype=torch.float64
             )
+            self.kernel4 = embeddings.Sinusoid(3, out_dimension, dtype=torch.float64)
 
     # Calculate magnitudes of signals
     def calc_mags(self, xyz: torch.Tensor):
@@ -41,12 +45,12 @@ class HdcRbfEncoder(torch.nn.Module):
         # Sum of squares of each component
         mags = torch.sqrt(torch.sum(sq, dim=1))
         return mags  # Magnitude signal samples
-    
+
     # Calculate energy of signals
     def calc_energy(self, xyz: torch.Tensor):
         n = xyz.shape[0]
         sq = torch.square(xyz)
-        energy = torch.sum(sq, dim=1) / max(n, 1)
+        energy = torch.sum(sq, dim=0) / max(n, 1)
         return energy
 
     # Calculate jerk of signals
@@ -85,12 +89,19 @@ class HdcRbfEncoder(torch.nn.Module):
             z_signal = F.pad(
                 input=input[:, 3], pad=(0, padding), mode="constant", value=0
             )
-            x_jerk = F.pad(input=jerks[:, 0], pad=(0, padding), mode="constant", value=0)
-            y_jerk = F.pad(input=jerks[:, 1], pad=(0, padding), mode="constant", value=0)
-            z_jerk = F.pad(input=jerks[:, 2], pad=(0, padding), mode="constant", value=0)
+            x_jerk = F.pad(
+                input=jerks[:, 0], pad=(0, padding), mode="constant", value=0
+            )
+            y_jerk = F.pad(
+                input=jerks[:, 1], pad=(0, padding), mode="constant", value=0
+            )
+            z_jerk = F.pad(
+                input=jerks[:, 2], pad=(0, padding), mode="constant", value=0
+            )
             mags = F.pad(input=mags, pad=(0, padding), mode="constant", value=0)
-            energy = F.pad(input=energy, pad=(0, padding), mode="constant", value=0)
-            jerk_mags = F.pad(input=jerk_mags, pad=(0, padding), mode="constant", value=0)
+            jerk_mags = F.pad(
+                input=jerk_mags, pad=(0, padding), mode="constant", value=0
+            )
         else:
             x_signal = input[:, 1]
             y_signal = input[:, 2]
@@ -100,10 +111,12 @@ class HdcRbfEncoder(torch.nn.Module):
             z_jerk = jerks[:, 2]
         features1 = torch.cat((x_signal, y_signal, z_signal))
         features2 = torch.cat((x_jerk, y_jerk, z_jerk))
-        features3 = torch.cat((mags, energy, jerk_mags))
+        features3 = torch.cat((mags, jerk_mags))
         # Use kernel encoder
         sample_hv1 = self.kernel1(features1)
         sample_hv2 = self.kernel2(features2)
-        sample_hv3 = self.kernel2(features3)
-        sample_hv = sample_hv1 * sample_hv2 * sample_hv3
+        sample_hv3 = self.kernel3(features3)
+        sample_hv4 = self.kernel4(energy)
+        sample_hv = sample_hv1 * sample_hv4 + sample_hv2 + sample_hv3
+        sample_hv = torch.tanh(sample_hv)
         return sample_hv.squeeze(0)
