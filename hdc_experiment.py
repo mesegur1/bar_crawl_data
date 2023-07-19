@@ -20,18 +20,18 @@ import getopt, sys
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 6000
-NUM_SIGNAL_LEVELS = 200
+NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
 
 # Data windowing settings
-WINDOW = 100
-WINDOW_STEP = 50
+WINDOW = 3000 #3 minute window: 1*60 seconds * 50Hz = 3000 samples per window
+WINDOW_STEP = 2500
 START_OFFSET = 0
-END_INDEX = 12000000
+END_INDEX = -1
 TRAINING_EPOCHS = 1
-SAMPLE_RATE = 20
-RCN_SAMPLE_RATE = 5
+SAMPLE_RATE = 50 #Hz
+RCN_SAMPLE_RATE = 5 #Hz
 TEST_RATIO = 0.30
 
 # Encoder options
