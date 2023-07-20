@@ -24,6 +24,15 @@ class HdcRbfEncoder(torch.nn.Module):
             self.kernel3 = embeddings.HyperTangent(
                 timestamps * 3, out_dimension, dtype=torch.float64
             )
+            self.kernel4 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel5 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel6 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
         else:
             self.kernel1 = embeddings.Sinusoid(
                 timestamps * 3, out_dimension, dtype=torch.float64
@@ -33,6 +42,15 @@ class HdcRbfEncoder(torch.nn.Module):
             )
             self.kernel3 = embeddings.Sinusoid(
                 timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel4 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel5 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel6 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
             )
 
     # Calculate magnitudes of signals
@@ -55,6 +73,13 @@ class HdcRbfEncoder(torch.nn.Module):
         input[:, 0] = input[:, 0] - input[0, 0]
         # Get FFT Signals
         fft_signals = torch.fft.fft(input[:, 1:], dim=0)
+        # Extract other features
+        mags = self.calc_mags(input[:, 1:])
+        energy= self.calc_energy(input[:, 1:])
+        fft_mags = self.calc_mags(fft_signals.real)
+        fft_mag_i = self.calc_mags(fft_signals.imag)
+        energy_fft = self.calc_energy(fft_signals.real)
+        energy_fft_i =  self.calc_energy(fft_signals.imag)
         # Get features from x, y, z samples
         window = input.size(0)  # sample count
         if window < self.timestamps:
@@ -87,6 +112,24 @@ class HdcRbfEncoder(torch.nn.Module):
             z_fft_i_signal = F.pad(
                 input=fft_signals[:, 2].imag, pad=(0, padding), mode="constant", value=0
             )
+            mags = F.pad(
+                input=mags, pad=(0, padding), mode="constant", value=0
+            )
+            energy = F.pad(
+                input=energy, pad=(0, padding), mode="constant", value=0
+            )
+            fft_mags = F.pad(
+                input=fft_mags, pad=(0, padding), mode="constant", value=0
+            )
+            fft_mag_i = F.pad(
+                input=fft_mag_i, pad=(0, padding), mode="constant", value=0
+            )
+            energy_fft = F.pad(
+                input=energy_fft, pad=(0, padding), mode="constant", value=0
+            )
+            energy_fft_i = F.pad(
+                input=energy_fft_i, pad=(0, padding), mode="constant", value=0
+            )
         else:
             x_signal = input[:, 1]
             y_signal = input[:, 2]
@@ -100,10 +143,16 @@ class HdcRbfEncoder(torch.nn.Module):
         features1 = torch.cat((x_signal, y_signal, z_signal))
         features2 = torch.cat((x_fft_signal, y_fft_signal, z_fft_signal))
         features3 = torch.cat((x_fft_i_signal, y_fft_i_signal, z_fft_i_signal))
+        features4 = torch.cat((mags, energy))
+        features5 = torch.cat((fft_mags, fft_mag_i))
+        features6 = torch.cat((energy_fft, energy_fft_i))
         # Use kernel encoder
         sample_hv1 = self.kernel1(features1)
         sample_hv2 = self.kernel2(features2)
         sample_hv3 = self.kernel3(features3)
-        sample_hv = sample_hv1 + sample_hv2 * sample_hv3
+        sample_hv4 = self.kernel4(features4)
+        sample_hv5 = self.kernel5(features5)
+        sample_hv6 = self.kernel6(features6)
+        sample_hv = sample_hv1 * sample_hv4 + sample_hv2 * sample_hv3 * sample_hv5 * sample_hv6
         sample_hv = torch.tanh(sample_hv)
         return sample_hv.squeeze(0)
