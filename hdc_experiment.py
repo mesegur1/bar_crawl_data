@@ -25,13 +25,13 @@ NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
 
 # Data windowing settings
-WINDOW = 3000 #3 minute window: 1*60 seconds * 50Hz = 3000 samples per window
-WINDOW_STEP = 2500
+WINDOW = 3000  # 1 minute window: 1*60 seconds * 20Hz = 3000 samples per window
+WINDOW_STEP = 1800
 START_OFFSET = 0
 END_INDEX = -1
 TRAINING_EPOCHS = 1
-SAMPLE_RATE = 50 #Hz
-RCN_SAMPLE_RATE = 5 #Hz
+SAMPLE_RATE = 20  # Hz
+RCN_SAMPLE_RATE = 5  # Hz
 TEST_RATIO = 0.30
 
 # Encoder options
