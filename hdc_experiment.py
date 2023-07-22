@@ -20,18 +20,18 @@ import getopt, sys
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 6000
-NUM_SIGNAL_LEVELS = 200
+NUM_SIGNAL_LEVELS = 100
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
 
 # Data windowing settings
-WINDOW = 100
-WINDOW_STEP = 50
+WINDOW = 600  # 30 second window: 30 seconds * 20Hz = 600 samples per window
+WINDOW_STEP = 500
 START_OFFSET = 0
-END_INDEX = 12000000
+END_INDEX = -1
 TRAINING_EPOCHS = 1
-SAMPLE_RATE = 20
-RCN_SAMPLE_RATE = 5
+SAMPLE_RATE = 20  # Hz
+RCN_SAMPLE_RATE = 5  # Hz
 TEST_RATIO = 0.30
 
 # Encoder options
@@ -190,7 +190,7 @@ def run_test_for_pid(
                 y_true.append(label_tensor.item())
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    f1 = f1_score(y_true, preds, zero_division=1)
+    f1 = f1_score(y_true, preds, zero_division=0)
     print(f"Testing F1 Score of model is {(f1):.3f}")
     return (accuracy.compute().item() * 100, f1)
 

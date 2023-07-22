@@ -4,7 +4,7 @@ import numpy as np
 import torchhd
 from torchhd_custom import embeddings
 
-NUM_CHANNEL = 3
+NUM_CHANNEL = 9
 
 
 # HDC Encoder for Bar Crawl Data
@@ -15,16 +15,71 @@ class HdcRbfEncoder(torch.nn.Module):
         self.timestamps = timestamps
         # RBF Kernel Trick
         if use_tanh == True:
-            self.kernel = embeddings.HyperTangent(
-                timestamps * NUM_CHANNEL, out_dimension, dtype=torch.float64
+            self.kernel1 = embeddings.HyperTangent(
+                timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel2 = embeddings.HyperTangent(
+                timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel3 = embeddings.HyperTangent(
+                timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel4 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel5 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel6 = embeddings.HyperTangent(
+                timestamps * 2, out_dimension, dtype=torch.float64
             )
         else:
-            self.kernel = embeddings.Sinusoid(
-                timestamps * NUM_CHANNEL, out_dimension, dtype=torch.float64
+            self.kernel1 = embeddings.Sinusoid(
+                timestamps * 3, out_dimension, dtype=torch.float64
             )
+            self.kernel2 = embeddings.Sinusoid(
+                timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel3 = embeddings.Sinusoid(
+                timestamps * 3, out_dimension, dtype=torch.float64
+            )
+            self.kernel4 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel5 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+            self.kernel6 = embeddings.Sinusoid(
+                timestamps * 2, out_dimension, dtype=torch.float64
+            )
+
+    # Calculate magnitudes of signals
+    def calc_mags(self, xyz: torch.Tensor):
+        sq = torch.square(xyz)
+        # Sum of squares of each component
+        mags = torch.sqrt(torch.sum(sq, dim=1))
+        return mags  # Magnitude signal samples
+
+    # Calculate energy of signals
+    def calc_energy(self, xyz: torch.Tensor):
+        n = xyz.shape[0]
+        sq = torch.square(xyz)
+        energy = torch.sum(sq, dim=1) / max(n, 1)
+        return energy
 
     # Encode window of feature vectors (x,y,z)
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        # Adjust time
+        input[:, 0] = input[:, 0] - input[0, 0]
+        # Get FFT Signals
+        fft_signals = torch.fft.fft(input[:, 1:], dim=0)
+        # Extract other features
+        mags = self.calc_mags(input[:, 1:])
+        energy= self.calc_energy(input[:, 1:])
+        fft_mags = self.calc_mags(fft_signals.real)
+        fft_mag_i = self.calc_mags(fft_signals.imag)
+        energy_fft = self.calc_energy(fft_signals.real)
+        energy_fft_i =  self.calc_energy(fft_signals.imag)
         # Get features from x, y, z samples
         window = input.size(0)  # sample count
         if window < self.timestamps:
@@ -39,11 +94,65 @@ class HdcRbfEncoder(torch.nn.Module):
             z_signal = F.pad(
                 input=input[:, 3], pad=(0, padding), mode="constant", value=0
             )
+            x_fft_signal = F.pad(
+                input=fft_signals[:, 0].real, pad=(0, padding), mode="constant", value=0
+            )
+            y_fft_signal = F.pad(
+                input=fft_signals[:, 1].real, pad=(0, padding), mode="constant", value=0
+            )
+            z_fft_signal = F.pad(
+                input=fft_signals[:, 2].real, pad=(0, padding), mode="constant", value=0
+            )
+            x_fft_i_signal = F.pad(
+                input=fft_signals[:, 0].imag, pad=(0, padding), mode="constant", value=0
+            )
+            y_fft_i_signal = F.pad(
+                input=fft_signals[:, 1].imag, pad=(0, padding), mode="constant", value=0
+            )
+            z_fft_i_signal = F.pad(
+                input=fft_signals[:, 2].imag, pad=(0, padding), mode="constant", value=0
+            )
+            mags = F.pad(
+                input=mags, pad=(0, padding), mode="constant", value=0
+            )
+            energy = F.pad(
+                input=energy, pad=(0, padding), mode="constant", value=0
+            )
+            fft_mags = F.pad(
+                input=fft_mags, pad=(0, padding), mode="constant", value=0
+            )
+            fft_mag_i = F.pad(
+                input=fft_mag_i, pad=(0, padding), mode="constant", value=0
+            )
+            energy_fft = F.pad(
+                input=energy_fft, pad=(0, padding), mode="constant", value=0
+            )
+            energy_fft_i = F.pad(
+                input=energy_fft_i, pad=(0, padding), mode="constant", value=0
+            )
         else:
             x_signal = input[:, 1]
             y_signal = input[:, 2]
             z_signal = input[:, 3]
-        features = torch.cat((x_signal, y_signal, z_signal))
+            x_fft_signal = fft_signals[:, 0].real
+            y_fft_signal = fft_signals[:, 1].real
+            z_fft_signal = fft_signals[:, 2].real
+            x_fft_i_signal = fft_signals[:, 0].imag
+            y_fft_i_signal = fft_signals[:, 1].imag
+            z_fft_i_signal = fft_signals[:, 2].imag
+        features1 = torch.cat((x_signal, y_signal, z_signal))
+        features2 = torch.cat((x_fft_signal, y_fft_signal, z_fft_signal))
+        features3 = torch.cat((x_fft_i_signal, y_fft_i_signal, z_fft_i_signal))
+        features4 = torch.cat((mags, energy))
+        features5 = torch.cat((fft_mags, fft_mag_i))
+        features6 = torch.cat((energy_fft, energy_fft_i))
         # Use kernel encoder
-        sample_hv = self.kernel(features)
+        sample_hv1 = self.kernel1(features1)
+        sample_hv2 = self.kernel2(features2)
+        sample_hv3 = self.kernel3(features3)
+        sample_hv4 = self.kernel4(features4)
+        sample_hv5 = self.kernel5(features5)
+        sample_hv6 = self.kernel6(features6)
+        sample_hv = sample_hv1 * sample_hv4 + sample_hv2 * sample_hv3 * sample_hv5 * sample_hv6
+        sample_hv = torch.tanh(sample_hv)
         return sample_hv.squeeze(0)
