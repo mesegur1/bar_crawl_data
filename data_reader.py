@@ -93,19 +93,58 @@ def load_pid_data(
 # Note: must run this script once to generate these CSVs before running this function
 def load_train_test_data():
     print("Load train frames")
-    train_feature_data_frame = pd.read_csv("data/generated_train_data.csv")
-    train_labels = pd.read_csv("data/generated_train_labels.csv").to_numpy()
+    train_feature_data_frame = pd.read_pickle(
+        "data/generated_train_data.pkl",
+    )
+    # We have to do special unpacking
+    train_set = pd.DataFrame([])
+    for column in train_feature_data_frame:
+        train_set[column] = [np.array(s) for s in train_feature_data_frame[column]]
+    train_labels = pd.read_pickle("data/generated_train_labels.pkl").to_numpy()
+
     print("Load test frames")
-    test_feature_data_frame = pd.read_csv("data/generated_test_data.csv")
-    test_labels = pd.read_csv("data/generated_test_labels.csv").to_numpy()
+    test_feature_data_frame = pd.read_pickle(
+        "data/generated_test_data.pkl",
+    )
+    # We have to do special unpacking
+    test_set = pd.DataFrame([])
+    for column in test_feature_data_frame:
+        test_set[column] = [np.array(s) for s in test_feature_data_frame[column]]
+    test_labels = pd.read_pickle("data/generated_test_labels.pkl").to_numpy()
 
     # Standardize data
+    print("Standardizing data")
     scaler = StandardScaler()
-    scaler.fit(train_feature_data_frame)
-    s_train_data = scaler.transform(train_feature_data_frame)
-    s_test_data = scaler.transform(test_feature_data_frame)
+    print("Standardizing training data")
+    s_train_data = []
+    for i, window_row in train_set.iterrows():
+        window_frame = pd.DataFrame([])
+        for c in train_set.columns:
+            window_frame[c] = window_row[c]
+        # window_frame = window_frame.ffill()
+        s_train_data.append(window_frame)
+    s_train_data = scaler.fit_transform(s_train_data)
+    print("Standardizing test data")
+    input()
+    s_test_data = []
+    for i, window_row in test_set.iterrows():
+        window_frame = pd.DataFrame([])
+        for c in test_set.columns:
+            window_frame[c] = window_row[c]
+        # window_frame = window_frame.ffill()
+        s_test_data.append(scaler.fit_transform(window_frame))
 
-    return (s_train_data, train_labels, s_test_data, test_labels)
+    print("Data Ready for Experiment")
+
+    input()
+
+    return (
+        s_train_data[0].shape[0],
+        s_train_data,
+        train_labels,
+        s_test_data,
+        test_labels,
+    )
 
 
 # Create windowed feature data from given data frame
@@ -226,18 +265,18 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
     # feature_frames["y_kurtosis"] = y_series.apply(lambda x: stats.kurtosis(x))
     # feature_frames["z_kurtosis"] = z_series.apply(lambda x: stats.kurtosis(x))
     # energy
-    feature_frames["x_energy"] = x_series.apply(lambda x: np.sum(x**2) / 100)
-    feature_frames["y_energy"] = y_series.apply(lambda x: np.sum(x**2) / 100)
-    feature_frames["z_energy"] = z_series.apply(lambda x: np.sum(x**2 / 100))
+    feature_frames["x_energy"] = x_series.apply(lambda x: np.sum(x**2) / window)
+    feature_frames["y_energy"] = y_series.apply(lambda x: np.sum(x**2) / window)
+    feature_frames["z_energy"] = z_series.apply(lambda x: np.sum(x**2) / window)
     # avg resultant
     feature_frames["avg_result_accl"] = [
         i.mean() for i in ((x_series**2 + y_series**2 + z_series**2) ** 0.5)
     ]
     # signal magnitude area
     feature_frames["sma"] = (
-        x_series.apply(lambda x: np.sum(abs(x) / 100))
-        + y_series.apply(lambda x: np.sum(abs(x) / 100))
-        + z_series.apply(lambda x: np.sum(abs(x) / 100))
+        x_series.apply(lambda x: np.sum(abs(x) / window))
+        + y_series.apply(lambda x: np.sum(abs(x) / window))
+        + z_series.apply(lambda x: np.sum(abs(x) / window))
     )
 
     #####
@@ -246,9 +285,9 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
     print("Extracting Frequency Domain Features (few minutes)")
 
     # converting the signals from time domain to frequency domain using FFT
-    x_list_fft = x_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
-    y_list_fft = y_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
-    z_list_fft = z_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
+    x_list_fft = x_series.apply(lambda x: np.abs(np.fft.fft(x)))
+    y_list_fft = y_series.apply(lambda x: np.abs(np.fft.fft(x)))
+    z_list_fft = z_series.apply(lambda x: np.abs(np.fft.fft(x)))
     # Statistical Features on raw x, y and z in frequency domain
     # FFT mean
     feature_frames["x_mean_fft"] = x_list_fft.apply(lambda x: x.mean())
@@ -339,18 +378,18 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
     # feature_frames["y_kurtosis_fft"] = y_list_fft.apply(lambda x: stats.kurtosis(x))
     # feature_frames["z_kurtosis_fft"] = z_list_fft.apply(lambda x: stats.kurtosis(x))
     # FFT energy
-    feature_frames["x_energy_fft"] = x_list_fft.apply(lambda x: np.sum(x**2) / 50)
-    feature_frames["y_energy_fft"] = y_list_fft.apply(lambda x: np.sum(x**2) / 50)
-    feature_frames["z_energy_fft"] = z_list_fft.apply(lambda x: np.sum(x**2 / 50))
+    feature_frames["x_energy_fft"] = x_list_fft.apply(lambda x: np.sum(x**2) / window)
+    feature_frames["y_energy_fft"] = y_list_fft.apply(lambda x: np.sum(x**2) / window)
+    feature_frames["z_energy_fft"] = z_list_fft.apply(lambda x: np.sum(x**2) / window)
     # FFT avg resultant
     feature_frames["avg_result_accl_fft"] = [
         i.mean() for i in ((x_list_fft**2 + y_list_fft**2 + z_list_fft**2) ** 0.5)
     ]
     # FFT Signal magnitude area
     feature_frames["sma_fft"] = (
-        x_list_fft.apply(lambda x: np.sum(abs(x) / 50))
-        + y_list_fft.apply(lambda x: np.sum(abs(x) / 50))
-        + z_list_fft.apply(lambda x: np.sum(abs(x) / 50))
+        x_list_fft.apply(lambda x: np.sum(abs(x) / window))
+        + y_list_fft.apply(lambda x: np.sum(abs(x) / window))
+        + z_list_fft.apply(lambda x: np.sum(abs(x) / window))
     )
 
     #####
@@ -431,13 +470,21 @@ if __name__ == "__main__":
     test_feature_data_frame, test_labels = create_features_data_frame(
         test_data_frame, WINDOW, WINDOW_STEP
     )
-    print("Saving training frames to CSV (few minutes)")
-    train_feature_data_frame.to_csv("data/generated_train_data.csv", index=False)
-    print("Saving testing frames to CSV (few minutes)")
-    test_feature_data_frame.to_csv("data/generated_test_data.csv", index=False)
-    print("Saving training labels to CSV (few minutes)")
-    pd.Series(train_labels).to_csv("data/generated_train_labels.csv", index=False)
-    print("Saving testing labels to CSV (few minutes)")
-    pd.Series(test_labels).to_csv("data/generated_test_labels.csv", index=False)
+
+    # Standardize data sets
+    # standardization
+    scaler = StandardScaler()
+    scaler.fit(train_feature_data_frame)
+    train_data_lr = scaler.transform(train_feature_data_frame)
+    test_data_lr = scaler.transform(test_feature_data_frame)
+
+    print("Saving training frames to File (few minutes)")
+    train_data_lr.to_pickle("data/generated_train_data.pkl")
+    print("Saving testing frames to File (few minutes)")
+    test_data_lr.to_pickle("data/generated_test_data.pkl")
+    print("Saving training labels to File (few minutes)")
+    pd.Series(train_labels).to_pickle("data/generated_train_labels.pkl")
+    print("Saving testing labels to File (few minutes)")
+    pd.Series(test_labels).to_pickle("data/generated_test_labels.pkl")
 
     print("All Done Generating Input Data")
