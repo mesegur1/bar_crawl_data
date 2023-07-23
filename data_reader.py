@@ -431,11 +431,13 @@ if __name__ == "__main__":
     test_feature_data_frame, test_labels = create_features_data_frame(
         test_data_frame, WINDOW, WINDOW_STEP
     )
-    print("Saving training frames to CSV")
-    train_feature_data_frame.to_csv("data/generated_train_data.csv")
-    print("Saving testing frames to CSV")
-    test_feature_data_frame.to_csv("data/generated_test_data.csv")
-    print("Saving training labels to CSV")
-    pd.Series(train_labels).to_csv("data/generated_train_labels.csv")
-    print("Saving testing labels to CSV")
-    pd.Series(test_labels).to_csv("data/generated_test_labels.csv")
+    print("Saving training frames to CSV (few minutes)")
+    train_feature_data_frame.to_csv("data/generated_train_data.csv", index=False)
+    print("Saving testing frames to CSV (few minutes)")
+    test_feature_data_frame.to_csv("data/generated_test_data.csv", index=False)
+    print("Saving training labels to CSV (few minutes)")
+    pd.Series(train_labels).to_csv("data/generated_train_labels.csv", index=False)
+    print("Saving testing labels to CSV (few minutes)")
+    pd.Series(test_labels).to_csv("data/generated_test_labels.csv", index=False)
+
+    print("All Done Generating Input Data")

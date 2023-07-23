@@ -8,7 +8,7 @@ from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
 from encoders import HdcRbfEncoder2
 from encoders import RcnHdcEncoder
-from data_reader2 import create_raw_train_test_dataframes
+from data_reader import load_train_test_data
 import torchmetrics
 from sklearn.metrics import f1_score
 from tqdm import tqdm
@@ -54,23 +54,6 @@ USE_TANH = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-pid_data_sets = {}
-PIDS = [
-    "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
-]
-
 TRAIN_PIDS = [
     "BK7610",
     "BU4707",
@@ -94,6 +77,7 @@ train_set = pd.DataFrame([])
 train_labels = []
 test_set = pd.DataFrame([])
 test_labels = []
+num_features = 1
 
 
 # Load all data for each pid
@@ -102,14 +86,11 @@ def load_all_pid_data(mode: int):
     global train_labels
     global test_set
     global test_labels
+    global num_features
 
-    sample_rate = SAMPLE_RATE
-    if mode == 2:
-        # Lower sample rate for RCN encoder
-        sample_rate = RCN_SAMPLE_RATE
-    train_set, train_labels, test_set, test_labels = create_raw_train_test_dataframes(
-        TRAIN_PIDS, TEST_PIDS, WINDOW, WINDOW_STEP, sample_rate
-    )
+    train_set, train_labels, test_set, test_labels = load_train_test_data()
+    num_features = train_set[0].shape[0]
+    print("Num of features = %d" % num_features)
 
 
 # Run train with provided model and encoder
@@ -162,12 +143,14 @@ def run_test(model: models.Centroid, encode: torch.nn.Module):
 
 
 def run_train_and_test(encoder_option: int):
+    global num_features
+
     # Create Centroid model
     model = models.Centroid(
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
     )
     # Create Encoder module
-    encode = HdcRbfEncoder2.HdcRbfEncoder2(WINDOW, DIMENSIONS, USE_TANH)
+    encode = HdcRbfEncoder2.HdcRbfEncoder2(num_features, WINDOW, DIMENSIONS, USE_TANH)
     encode = encode.to(device)
 
     # Run training
