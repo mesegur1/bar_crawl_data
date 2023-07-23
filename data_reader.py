@@ -5,8 +5,9 @@ import sklearn
 import pandas as pd
 import torch
 from tqdm import tqdm
-from sklearn.model_selection import train_test_split
-import csv
+from sklearn.preprocessing import StandardScaler
+from scipy import stats
+from scipy.signal import find_peaks
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
@@ -14,21 +15,6 @@ TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 MS_PER_SEC = 1000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-PIDS = [
-    "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
-]
 
 
 # Convert TAC measurement to a class
@@ -52,21 +38,18 @@ def load_accel_data_full():
     accel_data_full = pd.read_csv("data/all_accelerometer_data_pids_13.csv")
     accel_data_full["time"] = accel_data_full["time"].astype("datetime64[ms]")
     accel_data_full["pid"] = accel_data_full["pid"].astype(str)
-    accel_data_full["x"] = accel_data_full["x"].astype(float)
-    accel_data_full["y"] = accel_data_full["y"].astype(float)
-    accel_data_full["z"] = accel_data_full["z"].astype(float)
+    accel_data_full["x"] = accel_data_full["x"].astype("float64")
+    accel_data_full["y"] = accel_data_full["y"].astype("float64")
+    accel_data_full["z"] = accel_data_full["z"].astype("float64")
     accel_data_full = accel_data_full.set_index("time")
 
 
 # Load data from CSVs
-def load_data(
+def load_pid_data(
     pid: str,
     limit: int,
     offset: int,
-    window: int,
-    window_step: int,
     sample_rate: int = 20,
-    test_ratio: float = 0.5,
 ):
     global accel_data_full
     print("Reading in Data for person %s" % (pid))
@@ -99,47 +82,360 @@ def load_data(
     input_data = input_data.fillna(method="backfill")
     input_data["time"] = input_data.index
     input_data["time"] = input_data["time"].astype("int64")
-
-    print("Total Data length: %d" % (len(input_data.index)))
-
-    # Split data back into two parts for train/test set creation
-    accel_data = input_data[["time", "x", "y", "z"]].to_numpy()
-    tac_data_labels = input_data["TAC_Reading"].to_numpy().round().astype("int64")
-
-    print("Creating data sets")
-    # Split data into two parts
-    train_data_accel, test_data_accel, train_data_tac, test_data_tac = train_test_split(
-        accel_data,
-        tac_data_labels,
-        test_size=test_ratio,
-        shuffle=False,
+    input_data["TAC_Reading"] = (
+        input_data["TAC_Reading"].to_numpy().round().astype("int64")
     )
-    train_length = train_data_accel.shape[0]
-    test_length = test_data_accel.shape[0]
 
-    # Change training data to be windowed
-    train_data_accel = [
-        train_data_accel[base : base + window]
-        for base in range(0, len(train_data_accel), window_step)
+    return input_data
+
+
+# Load pregenerated train and test sets
+# Note: must run this script once to generate these CSVs before running this function
+def load_train_test_data():
+    print("Load train frames")
+    train_feature_data_frame = pd.read_csv("data/generated_train_data.csv")
+    train_labels = pd.read_csv("data/generated_train_labels.csv").to_numpy()
+    print("Load test frames")
+    test_feature_data_frame = pd.read_csv("data/generated_test_data.csv")
+    test_labels = pd.read_csv("data/generated_test_labels.csv").to_numpy()
+
+    # Standardize data
+    scaler = StandardScaler()
+    scaler.fit(train_feature_data_frame)
+    s_train_data = scaler.transform(train_feature_data_frame)
+    s_test_data = scaler.transform(test_feature_data_frame)
+
+    return (s_train_data, train_labels, s_test_data, test_labels)
+
+
+# Create windowed feature data from given data frame
+def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
+    x_list = []
+    y_list = []
+    z_list = []
+    t_list = []
+    labels = []
+
+    # Creating overlaping windows
+    print("Create overlaping windows")
+    for i in range(0, df.shape[0] - window, window_step):
+        xs = df["x"].to_numpy()[i : i + 100]
+        ys = df["y"].to_numpy()[i : i + 100]
+        zs = df["z"].to_numpy()[i : i + 100]
+        ts = df["time"].to_numpy()[i : i + 100]
+        label = stats.mode(df["TAC_Reading"][i : i + 100], keepdims=True)[0][0]
+
+        x_list.append(xs)
+        y_list.append(ys)
+        z_list.append(zs)
+        t_list.append(ts)
+        labels.append(label)
+
+    # Frame to contain windowed feature data
+    feature_frames = pd.DataFrame([])
+    x_series = pd.Series(x_list)
+    y_series = pd.Series(y_list)
+    z_series = pd.Series(z_list)
+
+    #####
+    # Time Domain Features
+    #####
+    print("Extracting Time Domain Features (few minutes)")
+
+    # raw readings
+    feature_frames["x"] = x_series
+    feature_frames["y"] = y_series
+    feature_frames["z"] = z_series
+    feature_frames["time"] = pd.Series(t_list)
+    # mean
+    feature_frames["x_mean"] = x_series.apply(lambda x: x.mean())
+    feature_frames["y_mean"] = y_series.apply(lambda x: x.mean())
+    feature_frames["z_mean"] = z_series.apply(lambda x: x.mean())
+    # std dev
+    feature_frames["x_std"] = x_series.apply(lambda x: x.std())
+    feature_frames["y_std"] = y_series.apply(lambda x: x.std())
+    feature_frames["z_std"] = z_series.apply(lambda x: x.std())
+    # avg absolute diff
+    feature_frames["x_aad"] = x_series.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    feature_frames["y_aad"] = y_series.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    feature_frames["z_aad"] = z_series.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    # min
+    feature_frames["x_min"] = x_series.apply(lambda x: x.min())
+    feature_frames["y_min"] = y_series.apply(lambda x: x.min())
+    feature_frames["z_min"] = z_series.apply(lambda x: x.min())
+    # max
+    feature_frames["x_max"] = x_series.apply(lambda x: x.max())
+    feature_frames["y_max"] = y_series.apply(lambda x: x.max())
+    feature_frames["z_max"] = z_series.apply(lambda x: x.max())
+    # max-min diff
+    feature_frames["x_maxmin_diff"] = feature_frames["x_max"] - feature_frames["x_min"]
+    feature_frames["y_maxmin_diff"] = feature_frames["y_max"] - feature_frames["y_min"]
+    feature_frames["z_maxmin_diff"] = feature_frames["z_max"] - feature_frames["z_min"]
+    # median
+    feature_frames["x_median"] = x_series.apply(lambda x: np.median(x))
+    feature_frames["y_median"] = y_series.apply(lambda x: np.median(x))
+    feature_frames["z_median"] = z_series.apply(lambda x: np.median(x))
+    # median abs dev
+    feature_frames["x_mad"] = x_series.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    feature_frames["y_mad"] = y_series.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    feature_frames["z_mad"] = z_series.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    # interquartile range
+    feature_frames["x_IQR"] = x_series.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    feature_frames["y_IQR"] = y_series.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    feature_frames["z_IQR"] = z_series.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    # negtive count
+    feature_frames["x_neg_count"] = x_series.apply(lambda x: np.sum(x < 0))
+    feature_frames["y_neg_count"] = y_series.apply(lambda x: np.sum(x < 0))
+    feature_frames["z_neg_count"] = z_series.apply(lambda x: np.sum(x < 0))
+    # positive count
+    feature_frames["x_pos_count"] = x_series.apply(lambda x: np.sum(x > 0))
+    feature_frames["y_pos_count"] = y_series.apply(lambda x: np.sum(x > 0))
+    feature_frames["z_pos_count"] = z_series.apply(lambda x: np.sum(x > 0))
+    # values above mean
+    feature_frames["x_above_mean"] = x_series.apply(lambda x: np.sum(x > x.mean()))
+    feature_frames["y_above_mean"] = y_series.apply(lambda x: np.sum(x > x.mean()))
+    feature_frames["z_above_mean"] = z_series.apply(lambda x: np.sum(x > x.mean()))
+    # number of peaks
+    feature_frames["x_peak_count"] = x_series.apply(lambda x: len(find_peaks(x)[0]))
+    feature_frames["y_peak_count"] = y_series.apply(lambda x: len(find_peaks(x)[0]))
+    feature_frames["z_peak_count"] = z_series.apply(lambda x: len(find_peaks(x)[0]))
+    # skewness
+    # feature_frames["x_skewness"] = x_series.apply(lambda x: stats.skew(x))
+    # feature_frames["y_skewness"] = y_series.apply(lambda x: stats.skew(x))
+    # feature_frames["z_skewness"] = z_series.apply(lambda x: stats.skew(x))
+    # kurtosis
+    # feature_frames["x_kurtosis"] = x_series.apply(lambda x: stats.kurtosis(x))
+    # feature_frames["y_kurtosis"] = y_series.apply(lambda x: stats.kurtosis(x))
+    # feature_frames["z_kurtosis"] = z_series.apply(lambda x: stats.kurtosis(x))
+    # energy
+    feature_frames["x_energy"] = x_series.apply(lambda x: np.sum(x**2) / 100)
+    feature_frames["y_energy"] = y_series.apply(lambda x: np.sum(x**2) / 100)
+    feature_frames["z_energy"] = z_series.apply(lambda x: np.sum(x**2 / 100))
+    # avg resultant
+    feature_frames["avg_result_accl"] = [
+        i.mean() for i in ((x_series**2 + y_series**2 + z_series**2) ** 0.5)
     ]
-    train_data_tac = [
-        train_data_tac[base : base + window]
-        for base in range(0, len(train_data_tac), window_step)
+    # signal magnitude area
+    feature_frames["sma"] = (
+        x_series.apply(lambda x: np.sum(abs(x) / 100))
+        + y_series.apply(lambda x: np.sum(abs(x) / 100))
+        + z_series.apply(lambda x: np.sum(abs(x) / 100))
+    )
+
+    #####
+    # Frequency Domain Features
+    #####
+    print("Extracting Frequency Domain Features (few minutes)")
+
+    # converting the signals from time domain to frequency domain using FFT
+    x_list_fft = x_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
+    y_list_fft = y_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
+    z_list_fft = z_series.apply(lambda x: np.abs(np.fft.fft(x))[1:51])
+    # Statistical Features on raw x, y and z in frequency domain
+    # FFT mean
+    feature_frames["x_mean_fft"] = x_list_fft.apply(lambda x: x.mean())
+    feature_frames["y_mean_fft"] = y_list_fft.apply(lambda x: x.mean())
+    feature_frames["z_mean_fft"] = z_list_fft.apply(lambda x: x.mean())
+    # FFT std dev
+    feature_frames["x_std_fft"] = x_list_fft.apply(lambda x: x.std())
+    feature_frames["y_std_fft"] = y_list_fft.apply(lambda x: x.std())
+    feature_frames["z_std_fft"] = z_list_fft.apply(lambda x: x.std())
+    # FFT avg absolute diff
+    feature_frames["x_aad_fft"] = x_list_fft.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    feature_frames["y_aad_fft"] = y_list_fft.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    feature_frames["z_aad_fft"] = z_list_fft.apply(
+        lambda x: np.mean(np.absolute(x - np.mean(x)))
+    )
+    # FFT min
+    feature_frames["x_min_fft"] = x_list_fft.apply(lambda x: x.min())
+    feature_frames["y_min_fft"] = y_list_fft.apply(lambda x: x.min())
+    feature_frames["z_min_fft"] = z_list_fft.apply(lambda x: x.min())
+    # FFT max
+    feature_frames["x_max_fft"] = x_list_fft.apply(lambda x: x.max())
+    feature_frames["y_max_fft"] = y_list_fft.apply(lambda x: x.max())
+    feature_frames["z_max_fft"] = z_list_fft.apply(lambda x: x.max())
+    # FFT max-min diff
+    feature_frames["x_maxmin_diff_fft"] = (
+        feature_frames["x_max_fft"] - feature_frames["x_min_fft"]
+    )
+    feature_frames["y_maxmin_diff_fft"] = (
+        feature_frames["y_max_fft"] - feature_frames["y_min_fft"]
+    )
+    feature_frames["z_maxmin_diff_fft"] = (
+        feature_frames["z_max_fft"] - feature_frames["z_min_fft"]
+    )
+    # FFT median
+    feature_frames["x_median_fft"] = x_list_fft.apply(lambda x: np.median(x))
+    feature_frames["y_median_fft"] = y_list_fft.apply(lambda x: np.median(x))
+    feature_frames["z_median_fft"] = z_list_fft.apply(lambda x: np.median(x))
+    # FFT median abs dev
+    feature_frames["x_mad_fft"] = x_list_fft.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    feature_frames["y_mad_fft"] = y_list_fft.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    feature_frames["z_mad_fft"] = z_list_fft.apply(
+        lambda x: np.median(np.absolute(x - np.median(x)))
+    )
+    # FFT Interquartile range
+    feature_frames["x_IQR_fft"] = x_list_fft.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    feature_frames["y_IQR_fft"] = y_list_fft.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    feature_frames["z_IQR_fft"] = z_list_fft.apply(
+        lambda x: np.percentile(x, 75) - np.percentile(x, 25)
+    )
+    # FFT values above mean
+    feature_frames["x_above_mean_fft"] = x_list_fft.apply(
+        lambda x: np.sum(x > x.mean())
+    )
+    feature_frames["y_above_mean_fft"] = y_list_fft.apply(
+        lambda x: np.sum(x > x.mean())
+    )
+    feature_frames["z_above_mean_fft"] = z_list_fft.apply(
+        lambda x: np.sum(x > x.mean())
+    )
+    # FFT number of peaks
+    feature_frames["x_peak_count_fft"] = x_list_fft.apply(
+        lambda x: len(find_peaks(x)[0])
+    )
+    feature_frames["y_peak_count_fft"] = y_list_fft.apply(
+        lambda x: len(find_peaks(x)[0])
+    )
+    feature_frames["z_peak_count_fft"] = z_list_fft.apply(
+        lambda x: len(find_peaks(x)[0])
+    )
+    # FFT skewness
+    # feature_frames["x_skewness_fft"] = x_list_fft.apply(lambda x: stats.skew(x))
+    # feature_frames["y_skewness_fft"] = y_list_fft.apply(lambda x: stats.skew(x))
+    # feature_frames["z_skewness_fft"] = z_list_fft.apply(lambda x: stats.skew(x))
+    # FFT kurtosis
+    # feature_frames["x_kurtosis_fft"] = x_list_fft.apply(lambda x: stats.kurtosis(x))
+    # feature_frames["y_kurtosis_fft"] = y_list_fft.apply(lambda x: stats.kurtosis(x))
+    # feature_frames["z_kurtosis_fft"] = z_list_fft.apply(lambda x: stats.kurtosis(x))
+    # FFT energy
+    feature_frames["x_energy_fft"] = x_list_fft.apply(lambda x: np.sum(x**2) / 50)
+    feature_frames["y_energy_fft"] = y_list_fft.apply(lambda x: np.sum(x**2) / 50)
+    feature_frames["z_energy_fft"] = z_list_fft.apply(lambda x: np.sum(x**2 / 50))
+    # FFT avg resultant
+    feature_frames["avg_result_accl_fft"] = [
+        i.mean() for i in ((x_list_fft**2 + y_list_fft**2 + z_list_fft**2) ** 0.5)
+    ]
+    # FFT Signal magnitude area
+    feature_frames["sma_fft"] = (
+        x_list_fft.apply(lambda x: np.sum(abs(x) / 50))
+        + y_list_fft.apply(lambda x: np.sum(abs(x) / 50))
+        + z_list_fft.apply(lambda x: np.sum(abs(x) / 50))
+    )
+
+    #####
+    # Index features
+    #####
+    print("Extracting Index Features (few minutes)")
+
+    # index of max value in time domain
+    feature_frames["x_argmax"] = x_series.apply(lambda x: np.argmax(x))
+    feature_frames["y_argmax"] = y_series.apply(lambda x: np.argmax(x))
+    feature_frames["z_argmax"] = z_series.apply(lambda x: np.argmax(x))
+    # index of min value in time domain
+    feature_frames["x_argmin"] = x_series.apply(lambda x: np.argmin(x))
+    feature_frames["y_argmin"] = y_series.apply(lambda x: np.argmin(x))
+    feature_frames["z_argmin"] = z_series.apply(lambda x: np.argmin(x))
+    # absolute difference between above indices
+    feature_frames["x_arg_diff"] = abs(
+        feature_frames["x_argmax"] - feature_frames["x_argmin"]
+    )
+    feature_frames["y_arg_diff"] = abs(
+        feature_frames["y_argmax"] - feature_frames["y_argmin"]
+    )
+    feature_frames["z_arg_diff"] = abs(
+        feature_frames["z_argmax"] - feature_frames["z_argmin"]
+    )
+
+    return (feature_frames, labels)
+
+
+if __name__ == "__main__":
+    TRAIN_PIDS = [
+        "BK7610",
+        "BU4707",
+        "CC6740",
+        "DC6359",
+        "DK3500",
+        "HV0618",
+        "JB3156",
+        "JR8022",
     ]
 
-    # Change test data to be windowed
-    test_data_accel = [
-        test_data_accel[base : base + window]
-        for base in range(0, len(test_data_accel), window_step)
+    TEST_PIDS = [
+        "MC7070",
+        "MJ8002",
+        "PC6771",
+        "SA0297",
+        "SF3079",
     ]
-    test_data_tac = [
-        test_data_tac[base : base + window]
-        for base in range(0, len(test_data_tac), window_step)
-    ]
+    # Data windowing settings
+    WINDOW = 100  # 5 second window: 5 seconds * 20Hz = 100 samples per window
+    WINDOW_STEP = 50
+    TRAINING_EPOCHS = 1
+    SAMPLE_RATE = 20  # Hz
 
-    train_set = tuple(zip(train_data_accel, train_data_tac))
-    print("Data Length For Training: %d" % (train_length))
-    test_set = tuple(zip(test_data_accel, test_data_tac))
-    print("Data Length For Testing: %d" % (test_length))
+    train_data_frame = pd.DataFrame([])
+    test_data_frame = pd.DataFrame([])
 
-    return (train_set, test_set)
+    # Load accel data
+    load_accel_data_full()
+
+    # Use merge accel data with PID data in test and train sets
+    for pid in TRAIN_PIDS:
+        train_data_frame = pd.concat(
+            [train_data_frame, load_pid_data(pid, -1, 0, SAMPLE_RATE)]
+        )
+    for pid in TEST_PIDS:
+        test_data_frame = pd.concat(
+            [test_data_frame, load_pid_data(pid, -1, 0, SAMPLE_RATE)]
+        )
+
+    # Create windowed data sets of features
+    print("Creating training set feature data")
+    train_feature_data_frame, train_labels = create_features_data_frame(
+        train_data_frame, WINDOW, WINDOW_STEP
+    )
+    print("Num of features = %d" % train_feature_data_frame.shape[1])
+    print("Creating test set feature data")
+    test_feature_data_frame, test_labels = create_features_data_frame(
+        test_data_frame, WINDOW, WINDOW_STEP
+    )
+    print("Saving training frames to CSV")
+    train_feature_data_frame.to_csv("data/generated_train_data.csv")
+    print("Saving testing frames to CSV")
+    test_feature_data_frame.to_csv("data/generated_test_data.csv")
+    print("Saving training labels to CSV")
+    pd.Series(train_labels).to_csv("data/generated_train_labels.csv")
+    print("Saving testing labels to CSV")
+    pd.Series(test_labels).to_csv("data/generated_test_labels.csv")
