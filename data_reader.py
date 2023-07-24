@@ -93,56 +93,50 @@ def load_pid_data(
 # Note: must run this script once to generate these CSVs before running this function
 def load_train_test_data():
     print("Load train frames")
-    train_feature_data_frame = pd.read_pickle(
-        "data/generated_train_data.pkl",
-    )
-    # We have to do special unpacking
-    train_set = pd.DataFrame([])
-    for column in train_feature_data_frame:
-        train_set[column] = [np.array(s) for s in train_feature_data_frame[column]]
-    train_labels = pd.read_pickle("data/generated_train_labels.pkl").to_numpy()
+    train_set = np.load("data/generated_train_data.npy", allow_pickle=True)
+    # # We have to do special unpacking
+    # train_set = pd.DataFrame([])
+    # for column in train_feature_data_frame:
+    #     train_set[column] = [np.array(s) for s in train_feature_data_frame[column]]
+    train_labels = np.load("data/generated_train_labels.npy", allow_pickle=True)
 
     print("Load test frames")
-    test_feature_data_frame = pd.read_pickle(
-        "data/generated_test_data.pkl",
-    )
-    # We have to do special unpacking
-    test_set = pd.DataFrame([])
-    for column in test_feature_data_frame:
-        test_set[column] = [np.array(s) for s in test_feature_data_frame[column]]
-    test_labels = pd.read_pickle("data/generated_test_labels.pkl").to_numpy()
+    test_set = np.load("data/generated_test_data.pkl", allow_pickle=True)
+    # # We have to do special unpacking
+    # test_set = pd.DataFrame([])
+    # for column in test_feature_data_frame:
+    #     test_set[column] = [np.array(s) for s in test_feature_data_frame[column]]
+    test_labels = np.load("data/generated_test_labels.pkl", allow_pickle=True)
 
-    # Standardize data
-    print("Standardizing data")
-    scaler = StandardScaler()
-    print("Standardizing training data")
-    s_train_data = []
-    for i, window_row in train_set.iterrows():
-        window_frame = pd.DataFrame([])
-        for c in train_set.columns:
-            window_frame[c] = window_row[c]
-        # window_frame = window_frame.ffill()
-        s_train_data.append(window_frame)
-    s_train_data = scaler.fit_transform(s_train_data)
-    print("Standardizing test data")
-    input()
-    s_test_data = []
-    for i, window_row in test_set.iterrows():
-        window_frame = pd.DataFrame([])
-        for c in test_set.columns:
-            window_frame[c] = window_row[c]
-        # window_frame = window_frame.ffill()
-        s_test_data.append(scaler.fit_transform(window_frame))
+    # # Standardize data
+    # print("Standardizing data")
+    # scaler = StandardScaler()
+    # print("Standardizing training data")
+    # s_train_data = []
+    # for i, window_row in train_set.iterrows():
+    #     window_frame = pd.DataFrame([])
+    #     for c in train_set.columns:
+    #         window_frame[c] = window_row[c]
+    #     # window_frame = window_frame.ffill()
+    #     s_train_data.append(window_frame)
+    # s_train_data = scaler.fit_transform(s_train_data)
+    # print("Standardizing test data")
+    # input()
+    # s_test_data = []
+    # for i, window_row in test_set.iterrows():
+    #     window_frame = pd.DataFrame([])
+    #     for c in test_set.columns:
+    #         window_frame[c] = window_row[c]
+    #     # window_frame = window_frame.ffill()
+    #     s_test_data.append(scaler.fit_transform(window_frame))
 
     print("Data Ready for Experiment")
 
-    input()
-
     return (
-        s_train_data[0].shape[0],
-        s_train_data,
+        train_set[0].shape[0],
+        train_set,
         train_labels,
-        s_test_data,
+        test_set,
         test_labels,
     )
 
@@ -471,20 +465,23 @@ if __name__ == "__main__":
         test_data_frame, WINDOW, WINDOW_STEP
     )
 
-    # Standardize data sets
-    # standardization
-    scaler = StandardScaler()
-    scaler.fit(train_feature_data_frame)
-    train_data_lr = scaler.transform(train_feature_data_frame)
-    test_data_lr = scaler.transform(test_feature_data_frame)
-
     print("Saving training frames to File (few minutes)")
-    train_data_lr.to_pickle("data/generated_train_data.pkl")
+    np.save(
+        "data/generated_train_data.npy",
+        train_feature_data_frame.to_numpy(),
+        allow_pickle=True,
+    )
     print("Saving testing frames to File (few minutes)")
-    test_data_lr.to_pickle("data/generated_test_data.pkl")
+    np.save(
+        "data/generated_test_data.npy",
+        test_feature_data_frame.to_numpy(),
+        allow_pickle=True,
+    )
     print("Saving training labels to File (few minutes)")
-    pd.Series(train_labels).to_pickle("data/generated_train_labels.pkl")
+    np.save(
+        "data/generated_train_labels.npy", np.array(train_labels), allow_pickle=True
+    )
     print("Saving testing labels to File (few minutes)")
-    pd.Series(test_labels).to_pickle("data/generated_test_labels.pkl")
+    np.save("data/generated_test_labels.npy", np.array(test_labels), allow_pickle=True)
 
     print("All Done Generating Input Data")

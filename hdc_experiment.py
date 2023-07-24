@@ -88,8 +88,13 @@ def load_all_pid_data(mode: int):
     global test_labels
     global num_features
 
-    train_set, train_labels, test_set, test_labels = load_train_test_data()
-    num_features = train_set[0].shape[0]
+    (
+        num_features,
+        train_set,
+        train_labels,
+        test_set,
+        test_labels,
+    ) = load_train_test_data()
     print("Num of features = %d" % num_features)
 
 
@@ -99,10 +104,10 @@ def run_train(model: models.Centroid, encode: torch.nn.Module):
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
-            for x, y in tqdm((train_set, train_labels)):
-                input_tensor = torch.tensor(
-                    x.to_numpy(), dtype=torch.float64, device=device
-                )
+            for x, y in tqdm(zip(train_set, train_labels)):
+                print("x.shape = ", x.shape)
+                x = np.asarray(x, dtype=np.float64)
+                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                 input_hypervector = encode(input_tensor)
                 input_hypervector = input_hypervector.unsqueeze(0)
                 label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
@@ -123,10 +128,8 @@ def run_test(model: models.Centroid, encode: torch.nn.Module):
     y_true = []
     preds = []
     with torch.no_grad():
-        for x, y in tqdm((test_set, test_labels)):
-            query_tensor = torch.tensor(
-                x.to_numpy(), dtype=torch.float64, device=device
-            )
+        for x, y in tqdm(zip(test_set, test_labels)):
+            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
             query_hypervector = encode(query_tensor)
             output = model(query_hypervector, dot=False)
             y_pred = torch.argmax(output).unsqueeze(0).to(device)
