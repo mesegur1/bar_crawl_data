@@ -8,6 +8,7 @@ from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
 from encoders import HdcFeatureLevelEncoder
 from encoders import HdcRbfEncoder
+from encoders import HdcFeatureRbfEncoder
 from encoders import RcnHdcEncoder
 from data_reader import load_train_test_data
 import torchmetrics
@@ -54,9 +55,6 @@ def encoder_mode_str(mode: int):
 USE_TANH = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-encode_f = HdcFeatureLevelEncoder.HdcFeatureLevelEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
-encode_f.to(device)
 
 TRAIN_PIDS = [
     "BK7610",
@@ -109,7 +107,7 @@ def load_all_pid_data(mode: int):
 
 
 # Run train with provided model and encoder
-def run_train(model: models.Centroid, encode: torch.nn.Module):
+def run_train(model: models.Centroid, encode: torch.nn.Module, encode_f: torch.nn.Module):
     # Train using training set half
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
@@ -133,7 +131,7 @@ def run_train(model: models.Centroid, encode: torch.nn.Module):
                 )
 
 
-def run_test(model: models.Centroid, encode: torch.nn.Module):
+def run_test(model: models.Centroid, encode: torch.nn.Module, encode_f: torch.nn.Module):
     # Test using test set half
     print("Begin Predicting (few minutes)")
     accuracy = torchmetrics.Accuracy(
@@ -180,20 +178,24 @@ def run_train_and_test(encoder_option: int):
     # Create Encoder module
     if encoder_option == USE_LEVEL_ENCODER:
         encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+        encode_f = HdcFeatureLevelEncoder.HdcFeatureLevelEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
     elif encoder_option == USE_RBF_ENCODER:
         encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
+        encode_f = HdcFeatureRbfEncoder.HdcFeatureRbfEncoder(num_features, DIMENSIONS)
     elif encoder_option == USE_RCN_ENCODER:
         encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
+        encode_f = HdcFeatureLevelEncoder.HdcFeatureLevelEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
     encode = encode.to(device)
+    encode_f = encode_f.to(device)
 
     # Run training
-    run_train(model, encode)
+    run_train(model, encode, encode_f)
 
     print("Normalizing model")
     model.normalize()
 
     # Run Testing
-    accuracy = run_test(model, encode)
+    accuracy = run_test(model, encode, encode_f)
 
     return accuracy
 
