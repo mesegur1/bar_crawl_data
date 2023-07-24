@@ -6,6 +6,7 @@ from torchhd import embeddings
 import pandas as pd
 from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
+from encoders import HdcFeatureLevelEncoder
 from encoders import HdcRbfEncoder
 from encoders import RcnHdcEncoder
 from data_reader import load_train_test_data
@@ -53,6 +54,9 @@ def encoder_mode_str(mode: int):
 USE_TANH = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+encode_f = HdcFeatureLevelEncoder.HdcFeatureLevelEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
+encode_f.to(device)
 
 TRAIN_PIDS = [
     "BK7610",
@@ -109,21 +113,29 @@ def run_train(model: models.Centroid, encode: torch.nn.Module):
     # Train using training set half
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
-            print("Training Epoch %d" % (e))
+            print("Training Epoch %d (10 minutes)" % (e))
             for r_x, f_x, y in tqdm(zip(train_raw_set, train_feature_set, train_labels)):
-                r_input_tensor = torch.tensor(r_x, dtype=torch.float64, device=device)
+                #Raw data
+                r_x_stacked = np.column_stack([x for x in r_x])
+                r_input_tensor = torch.tensor(r_x_stacked, dtype=torch.float64, device=device)
                 r_input_hypervector = encode(r_input_tensor)
                 r_input_hypervector = r_input_hypervector.unsqueeze(0)
+                #Feature data
+                f_input_tensor = torch.tensor(f_x, dtype=torch.float64, device=device)
+                f_input_hypervector = encode_f(f_input_tensor)
+                f_input_hypervector = f_input_hypervector.unsqueeze(0)
+                #Combine hypervectors
+                input_hypervector = torchhd.bind(r_input_hypervector, f_input_hypervector)
                 label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 model.add_adjust_iterative(
-                    r_input_hypervector, label_tensor, lr=LEARNING_RATE
+                    input_hypervector, label_tensor, lr=LEARNING_RATE
                 )
 
 
 def run_test(model: models.Centroid, encode: torch.nn.Module):
     # Test using test set half
-    print("Begin Predicting")
+    print("Begin Predicting (few minutes)")
     accuracy = torchmetrics.Accuracy(
         "multiclass",
         num_classes=NUM_TAC_LEVELS,
@@ -133,8 +145,17 @@ def run_test(model: models.Centroid, encode: torch.nn.Module):
     preds = []
     with torch.no_grad():
         for r_x, f_x, y in tqdm(zip(test_raw_set, test_feature_set, test_labels)):
-            r_query_tensor = torch.tensor(r_x, dtype=torch.float64, device=device)
-            query_hypervector = encode(r_query_tensor)
+            #Raw data
+            r_x_stacked = np.column_stack([x for x in r_x])
+            r_input_tensor = torch.tensor(r_x_stacked, dtype=torch.float64, device=device)
+            r_input_hypervector = encode(r_input_tensor)
+            r_input_hypervector = r_input_hypervector.unsqueeze(0)
+            #Feature data
+            f_input_tensor = torch.tensor(f_x, dtype=torch.float64, device=device)
+            f_input_hypervector = encode_f(f_input_tensor)
+            f_input_hypervector = f_input_hypervector.unsqueeze(0)
+            #Combine hypervectors
+            query_hypervector = torchhd.bind(r_input_hypervector, f_input_hypervector)
             output = model(query_hypervector, dot=False)
             y_pred = torch.argmax(output).unsqueeze(0).to(device)
             label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
@@ -167,6 +188,9 @@ def run_train_and_test(encoder_option: int):
 
     # Run training
     run_train(model, encode)
+
+    print("Normalizing model")
+    model.normalize()
 
     # Run Testing
     accuracy = run_test(model, encode)
