@@ -6,7 +6,7 @@ from torchhd import embeddings
 import pandas as pd
 from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
-from encoders import HdcRbfEncoder2
+from encoders import HdcRbfEncoder
 from encoders import RcnHdcEncoder
 from data_reader import load_train_test_data
 import torchmetrics
@@ -73,26 +73,32 @@ TEST_PIDS = [
     "SF3079",
 ]
 
-train_set = pd.DataFrame([])
-train_labels = []
-test_set = pd.DataFrame([])
-test_labels = []
+train_feature_set = np.array([])
+train_raw_set = np.array([])
+train_labels = np.array([])
+test_feature_set = np.array([])
+test_raw_set = np.array([])
+test_labels = np.array([])
 num_features = 1
 
 
 # Load all data for each pid
 def load_all_pid_data(mode: int):
-    global train_set
+    global train_feature_set
+    global train_raw_set
     global train_labels
-    global test_set
+    global test_feature_set
+    global test_raw_set
     global test_labels
     global num_features
 
     (
         num_features,
-        train_set,
+        train_feature_set,
+        train_raw_set,
         train_labels,
-        test_set,
+        test_feature_set,
+        test_raw_set,
         test_labels,
     ) = load_train_test_data()
     print("Num of features = %d" % num_features)
@@ -104,16 +110,14 @@ def run_train(model: models.Centroid, encode: torch.nn.Module):
     with torch.no_grad():
         for e in range(0, TRAINING_EPOCHS):
             print("Training Epoch %d" % (e))
-            for x, y in tqdm(zip(train_set, train_labels)):
-                print("x.shape = ", x.shape)
-                x = np.asarray(x, dtype=np.float64)
-                input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                input_hypervector = encode(input_tensor)
-                input_hypervector = input_hypervector.unsqueeze(0)
+            for r_x, f_x, y in tqdm(zip(train_raw_set, train_feature_set, train_labels)):
+                r_input_tensor = torch.tensor(r_x, dtype=torch.float64, device=device)
+                r_input_hypervector = encode(r_input_tensor)
+                r_input_hypervector = r_input_hypervector.unsqueeze(0)
                 label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 model.add_adjust_iterative(
-                    input_hypervector, label_tensor, lr=LEARNING_RATE
+                    r_input_hypervector, label_tensor, lr=LEARNING_RATE
                 )
 
 
@@ -128,9 +132,9 @@ def run_test(model: models.Centroid, encode: torch.nn.Module):
     y_true = []
     preds = []
     with torch.no_grad():
-        for x, y in tqdm(zip(test_set, test_labels)):
-            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-            query_hypervector = encode(query_tensor)
+        for r_x, f_x, y in tqdm(zip(test_raw_set, test_feature_set, test_labels)):
+            r_query_tensor = torch.tensor(r_x, dtype=torch.float64, device=device)
+            query_hypervector = encode(r_query_tensor)
             output = model(query_hypervector, dot=False)
             y_pred = torch.argmax(output).unsqueeze(0).to(device)
             label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
@@ -153,7 +157,12 @@ def run_train_and_test(encoder_option: int):
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
     )
     # Create Encoder module
-    encode = HdcRbfEncoder2.HdcRbfEncoder2(num_features, WINDOW, DIMENSIONS, USE_TANH)
+    if encoder_option == USE_LEVEL_ENCODER:
+        encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+    elif encoder_option == USE_RBF_ENCODER:
+        encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
+    elif encoder_option == USE_RCN_ENCODER:
+        encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
     encode = encode.to(device)
 
     # Run training

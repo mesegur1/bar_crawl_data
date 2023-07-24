@@ -14,6 +14,39 @@ TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 
 MS_PER_SEC = 1000
 
+##
+# Settings
+##
+TRAIN_FEATURE_SET_FILENAME = "data/generated_train_feature_data.npy"
+TRAIN_RAW_SET_FILENAME = "data/generated_train_raw_data.npy"
+TEST_FEATURE_SET_FILENAME = "data/generated_test_feature_data.npy"
+TEST_RAW_SET_FILENAME = "data/generated_test_raw_data.npy"
+TRAIN_LABELS_FILENAME = "data/generated_train_labels.npy"
+TEST_LABELS_FILENAME = "data/generated_test_labels.npy"
+TRAIN_PIDS = [
+    "BK7610",
+    "BU4707",
+    "CC6740",
+    "DC6359",
+    "DK3500",
+    "HV0618",
+    "JB3156",
+    "JR8022",
+]
+TEST_PIDS = [
+    "MC7070",
+    "MJ8002",
+    "PC6771",
+    "SA0297",
+    "SF3079",
+]
+# Data windowing settings
+WINDOW = 100  # 5 second window: 5 seconds * 20Hz = 100 samples per window
+WINDOW_STEP = 50
+TRAINING_EPOCHS = 1
+SAMPLE_RATE = 20  # Hz
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -89,54 +122,27 @@ def load_pid_data(
     return input_data
 
 
-# Load pregenerated train and test sets
-# Note: must run this script once to generate these CSVs before running this function
+# Load pre-generated train and test sets
 def load_train_test_data():
     print("Load train frames")
-    train_set = np.load("data/generated_train_data.npy", allow_pickle=True)
-    # # We have to do special unpacking
-    # train_set = pd.DataFrame([])
-    # for column in train_feature_data_frame:
-    #     train_set[column] = [np.array(s) for s in train_feature_data_frame[column]]
-    train_labels = np.load("data/generated_train_labels.npy", allow_pickle=True)
+    train_feature_set = np.load(TRAIN_FEATURE_SET_FILENAME, allow_pickle=True)
+    train_raw_set = np.load(TRAIN_RAW_SET_FILENAME, allow_pickle=True)
+    train_labels = np.load(TRAIN_LABELS_FILENAME, allow_pickle=True)
 
     print("Load test frames")
-    test_set = np.load("data/generated_test_data.pkl", allow_pickle=True)
-    # # We have to do special unpacking
-    # test_set = pd.DataFrame([])
-    # for column in test_feature_data_frame:
-    #     test_set[column] = [np.array(s) for s in test_feature_data_frame[column]]
-    test_labels = np.load("data/generated_test_labels.pkl", allow_pickle=True)
-
-    # # Standardize data
-    # print("Standardizing data")
-    # scaler = StandardScaler()
-    # print("Standardizing training data")
-    # s_train_data = []
-    # for i, window_row in train_set.iterrows():
-    #     window_frame = pd.DataFrame([])
-    #     for c in train_set.columns:
-    #         window_frame[c] = window_row[c]
-    #     # window_frame = window_frame.ffill()
-    #     s_train_data.append(window_frame)
-    # s_train_data = scaler.fit_transform(s_train_data)
-    # print("Standardizing test data")
-    # input()
-    # s_test_data = []
-    # for i, window_row in test_set.iterrows():
-    #     window_frame = pd.DataFrame([])
-    #     for c in test_set.columns:
-    #         window_frame[c] = window_row[c]
-    #     # window_frame = window_frame.ffill()
-    #     s_test_data.append(scaler.fit_transform(window_frame))
+    test_feature_set = np.load(TEST_FEATURE_SET_FILENAME, allow_pickle=True)
+    test_raw_set = np.load(TEST_RAW_SET_FILENAME, allow_pickle=True)
+    test_labels = np.load(TEST_LABELS_FILENAME, allow_pickle=True)
 
     print("Data Ready for Experiment")
 
     return (
-        train_set[0].shape[0],
-        train_set,
+        train_feature_set[0].shape[0],
+        train_feature_set,
+        train_raw_set,
         train_labels,
-        test_set,
+        test_feature_set,
+        test_raw_set,
         test_labels,
     )
 
@@ -164,11 +170,15 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
         t_list.append(ts)
         labels.append(label)
 
-    # Frame to contain windowed feature data
-    feature_frames = pd.DataFrame([])
+    # Frame to contain raw sensor data
+    raw_frames = pd.DataFrame([])
     x_series = pd.Series(x_list)
     y_series = pd.Series(y_list)
     z_series = pd.Series(z_list)
+
+
+    # Frame to contain windowed feature data
+    feature_frames = pd.DataFrame([])
 
     #####
     # Time Domain Features
@@ -176,10 +186,11 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
     print("Extracting Time Domain Features (few minutes)")
 
     # raw readings
-    feature_frames["x"] = x_series
-    feature_frames["y"] = y_series
-    feature_frames["z"] = z_series
-    feature_frames["time"] = pd.Series(t_list)
+    raw_frames["time"] = pd.Series(t_list)
+    raw_frames["x"] = x_series
+    raw_frames["y"] = y_series
+    raw_frames["z"] = z_series
+
     # mean
     feature_frames["x_mean"] = x_series.apply(lambda x: x.mean())
     feature_frames["y_mean"] = y_series.apply(lambda x: x.mean())
@@ -410,34 +421,10 @@ def create_features_data_frame(df: pd.DataFrame, window: int, window_step: int):
         feature_frames["z_argmax"] - feature_frames["z_argmin"]
     )
 
-    return (feature_frames, labels)
+    return (raw_frames, feature_frames, labels)
 
 
 if __name__ == "__main__":
-    TRAIN_PIDS = [
-        "BK7610",
-        "BU4707",
-        "CC6740",
-        "DC6359",
-        "DK3500",
-        "HV0618",
-        "JB3156",
-        "JR8022",
-    ]
-
-    TEST_PIDS = [
-        "MC7070",
-        "MJ8002",
-        "PC6771",
-        "SA0297",
-        "SF3079",
-    ]
-    # Data windowing settings
-    WINDOW = 100  # 5 second window: 5 seconds * 20Hz = 100 samples per window
-    WINDOW_STEP = 50
-    TRAINING_EPOCHS = 1
-    SAMPLE_RATE = 20  # Hz
-
     train_data_frame = pd.DataFrame([])
     test_data_frame = pd.DataFrame([])
 
@@ -456,32 +443,49 @@ if __name__ == "__main__":
 
     # Create windowed data sets of features
     print("Creating training set feature data")
-    train_feature_data_frame, train_labels = create_features_data_frame(
+    train_raw_data_frame, train_feature_data_frame, train_labels = create_features_data_frame(
         train_data_frame, WINDOW, WINDOW_STEP
     )
     print("Num of features = %d" % train_feature_data_frame.shape[1])
     print("Creating test set feature data")
-    test_feature_data_frame, test_labels = create_features_data_frame(
+    test_raw_data_frame, test_feature_data_frame, test_labels = create_features_data_frame(
         test_data_frame, WINDOW, WINDOW_STEP
     )
 
+    #Standardize feature data
+    print("Standardizing feature data")
+    scaler = StandardScaler()
+    scaler.fit(train_feature_data_frame)
+    train_feature_data_frame = scaler.transform(train_feature_data_frame)
+    test_feature_data_frame = scaler.transform(test_feature_data_frame)
+
     print("Saving training frames to File (few minutes)")
     np.save(
-        "data/generated_train_data.npy",
-        train_feature_data_frame.to_numpy(),
+        TRAIN_FEATURE_SET_FILENAME,
+        train_feature_data_frame,
+        allow_pickle=True,
+    )
+    np.save(
+        TRAIN_RAW_SET_FILENAME,
+        train_raw_data_frame.to_numpy(),
         allow_pickle=True,
     )
     print("Saving testing frames to File (few minutes)")
     np.save(
-        "data/generated_test_data.npy",
-        test_feature_data_frame.to_numpy(),
+        TEST_FEATURE_SET_FILENAME,
+        test_feature_data_frame,
+        allow_pickle=True,
+    )
+    np.save(
+        TEST_RAW_SET_FILENAME,
+        test_raw_data_frame.to_numpy(),
         allow_pickle=True,
     )
     print("Saving training labels to File (few minutes)")
     np.save(
-        "data/generated_train_labels.npy", np.array(train_labels), allow_pickle=True
+        TRAIN_LABELS_FILENAME, np.array(train_labels), allow_pickle=True
     )
     print("Saving testing labels to File (few minutes)")
-    np.save("data/generated_test_labels.npy", np.array(test_labels), allow_pickle=True)
+    np.save(TEST_LABELS_FILENAME, np.array(test_labels), allow_pickle=True)
 
     print("All Done Generating Input Data")
