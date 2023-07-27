@@ -82,7 +82,12 @@ def load_all_pid_data(mode: int):
     # Get subset of data for these pids
     for pid in PIDS2:
         # Load data from CSVs
-        end_index = 500000
+        if pid == "CC6740":
+            end_index = 500000
+        elif pid == "SA0297":
+            end_index = 1000000
+        else:
+            end_index = END_INDEX
         train_set, test_set = load_data(
             pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
         )
@@ -245,7 +250,7 @@ if __name__ == "__main__":
                 elif currentValue == str(1):
                     mode = USE_RBF_ENCODER
                 elif currentValue == str(2):
-                    mode = USE_RBF_ENCODER
+                    mode = USE_RCN_ENCODER
                 elif currentValue == str(3):
                     mode = USE_SINUSOID_NGRAM_ENCODER
                 else:

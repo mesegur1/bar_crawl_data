@@ -64,9 +64,9 @@ class RcnHdcEncoder(torch.nn.Module):
             )
             sample_hvs = torch.stack((x_hypervector, y_hypervector, z_hypervector))
             # Data fusion of channels
-            sample_hv = torchhd.multiset(sample_hvs) + torchhd.multibind(sample_hvs)
+            sample_hv = torchhd.multiset(sample_hvs).sign()
             # Apply activation function
-            sample_hv = torch.tanh(sample_hv)
+            sample_hv = torch.sin(sample_hv)
         else:
             sample_hv = torch.zeros_like(self.x_basis[0])
         return sample_hv.double()

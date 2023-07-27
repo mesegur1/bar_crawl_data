@@ -45,5 +45,7 @@ class HdcRbfEncoder(torch.nn.Module):
             z_signal = input[:, 3]
         features = torch.cat((x_signal, y_signal, z_signal))
         # Use kernel encoder
-        sample_hv = self.kernel(features)
+        sample_hv = self.kernel(features).sign()
+        # Apply activation function
+        sample_hv = torch.sin(sample_hv)
         return sample_hv.squeeze(0)

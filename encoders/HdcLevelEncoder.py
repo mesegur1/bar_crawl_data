@@ -51,10 +51,10 @@ class HdcLevelEncoder(torch.nn.Module):
         y_levels = self.signal_level_y(y_signal)
         z_levels = self.signal_level_z(z_signal)
         # Get time hypervectors
-        times = self.timestamps(input[:, 0] - input[0, 0])
+        times = self.timestamps(input[:, 0])
         # Bind time sequence for x, y, z samples
         sample_hvs = x_levels * y_levels * z_levels * times
-        sample_hv = torchhd.multiset(sample_hvs)
+        sample_hv = torchhd.multiset(sample_hvs).sign()
         # Apply activation function
-        sample_hv = torch.tanh(sample_hv)
+        sample_hv = torch.sin(sample_hv)
         return sample_hv
