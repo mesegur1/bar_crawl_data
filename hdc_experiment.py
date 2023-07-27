@@ -7,6 +7,7 @@ from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
 from encoders import HdcRbfEncoder
 from encoders import RcnHdcEncoder
+from encoders import HdcSinusoidNgramEncoder
 from data_reader import load_data
 from data_reader import load_accel_data_full
 import torchmetrics
@@ -28,7 +29,7 @@ LEARNING_RATE = 0.005
 WINDOW = 100
 WINDOW_STEP = 50
 START_OFFSET = 0
-END_INDEX = 12000000
+END_INDEX = np.inf
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 20
 RCN_SAMPLE_RATE = 5
@@ -38,6 +39,7 @@ TEST_RATIO = 0.30
 USE_LEVEL_ENCODER = 0
 USE_RBF_ENCODER = 1
 USE_RCN_ENCODER = 2
+USE_SINUSOID_NGRAM_ENCODER = 3
 
 
 def encoder_mode_str(mode: int):
@@ -47,6 +49,8 @@ def encoder_mode_str(mode: int):
         return "rbf"
     elif mode == USE_RCN_ENCODER:
         return "rcn"
+    elif mode == USE_SINUSOID_NGRAM_ENCODER:
+        return "sinusoid-ngram"
     else:
         return "unknown"
 
@@ -57,21 +61,10 @@ USE_TANH = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 pid_data_sets = {}
-PIDS = [
-    "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
-]
+#                            This one  This one also
+PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
+#
+PIDS2 = ["CC6740", "SA0297"]
 
 
 # Load all data for each pid
@@ -80,10 +73,18 @@ def load_all_pid_data(mode: int):
     if mode == 2:
         # Lower sample rate for RCN encoder
         sample_rate = RCN_SAMPLE_RATE
-    for pid in PIDS:
+    for pid in PIDS1:
         # Load data from CSVs
         train_set, test_set = load_data(
             pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
+        )
+        pid_data_sets[pid] = (train_set, test_set)
+    # Get subset of data for these pids
+    for pid in PIDS2:
+        # Load data from CSVs
+        end_index = 500000
+        train_set, test_set = load_data(
+            pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
         )
         pid_data_sets[pid] = (train_set, test_set)
 
@@ -112,14 +113,12 @@ def run_train_for_pid(
                         )
                         input_hypervector = encode(input_tensor)
                         input_hypervector = input_hypervector.unsqueeze(0)
-                        label_tensor = torch.tensor(
-                            y[-1], dtype=torch.int64, device=device
-                        )
+                        label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                         label_tensor = label_tensor.unsqueeze(0)
                         model.add_adjust_iterative(
                             input_hypervector, label_tensor, lr=LEARNING_RATE
                         )
-                        writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1]))
+                        writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
                         file.flush()
             file.close()
     else:
@@ -130,7 +129,7 @@ def run_train_for_pid(
                     input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                     input_hypervector = encode(input_tensor)
                     input_hypervector = input_hypervector.unsqueeze(0)
-                    label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                    label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                     label_tensor = label_tensor.unsqueeze(0)
                     model.add_adjust_iterative(
                         input_hypervector, label_tensor, lr=LEARNING_RATE
@@ -164,13 +163,13 @@ def run_test_for_pid(
                     query_hypervector = encode(query_tensor)
                     output = model(query_hypervector, dot=False)
                     y_pred = torch.argmax(output).unsqueeze(0).to(device)
-                    label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                    label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                     label_tensor = label_tensor.unsqueeze(0)
                     accuracy.update(y_pred, label_tensor)
                     preds.append(y_pred.item())
                     y_true.append(label_tensor.item())
                     writer.writerow(
-                        (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y[-1], y_pred.item())
+                        (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
                     )
                     file.flush()
             file.close()
@@ -183,14 +182,14 @@ def run_test_for_pid(
                 query_hypervector = encode(query_tensor)
                 output = model(query_hypervector, dot=False)
                 y_pred = torch.argmax(output).unsqueeze(0).to(device)
-                label_tensor = torch.tensor(y[-1], dtype=torch.int64, device=device)
+                label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 accuracy.update(y_pred, label_tensor)
                 preds.append(y_pred.item())
                 y_true.append(label_tensor.item())
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    f1 = f1_score(y_true, preds, zero_division=1)
+    f1 = f1_score(y_true, preds, zero_division=0)
     print(f"Testing F1 Score of model is {(f1):.3f}")
     return (accuracy.compute().item() * 100, f1)
 
@@ -208,6 +207,8 @@ def run_individual_train_and_test_for_pid(pid: str, encoder_option: int):
         encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
     elif encoder_option == USE_RCN_ENCODER:
         encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
+    elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
+        encode = HdcSinusoidNgramEncoder.HdcSinusoidNgramEncoder(DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
@@ -240,17 +241,17 @@ if __name__ == "__main__":
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
                 if currentValue == str(0):
-                    mode = 0
+                    mode = USE_LEVEL_ENCODER
                 elif currentValue == str(1):
-                    mode = 1
+                    mode = USE_RBF_ENCODER
                 elif currentValue == str(2):
-                    mode = 2
+                    mode = USE_RBF_ENCODER
+                elif currentValue == str(3):
+                    mode = USE_SINUSOID_NGRAM_ENCODER
                 else:
-                    mode = 0
+                    mode = USE_LEVEL_ENCODER
 
-        print(
-            "Single-PID-Train, Single-PID-Test for %s encoder" % encoder_mode_str(mode)
-        )
+        print("Single-PID-Tests for %s encoder" % encoder_mode_str(mode))
         # Load datasets in windowed format
         load_accel_data_full()
         load_all_pid_data(mode)
@@ -259,7 +260,7 @@ if __name__ == "__main__":
             "results/hdc_output_single_%s.csv" % encoder_mode_str(mode), "w", newline=""
         ) as file:
             writer = csv.writer(file)
-            for pid in PIDS:
+            for pid in PIDS1 + PIDS2:
                 accuracy, f1 = run_individual_train_and_test_for_pid(pid, mode)
                 writer.writerow([pid, accuracy, f1])
                 file.flush()

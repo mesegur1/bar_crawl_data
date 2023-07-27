@@ -5,6 +5,7 @@ import sklearn
 import pandas as pd
 import torch
 from tqdm import tqdm
+from scipy import stats
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -89,16 +90,16 @@ def load_data(
     # Down sample accelerometer data
     accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
 
-    if limit > len(accel_data_specific.index):
-        limit = len(accel_data_specific.index)
-    accel_data_specific = accel_data_specific.iloc[offset:limit]
-
     # Combine Data Frames to perform interpolation and backfilling
     input_data = accel_data.join(tac_data, how="outer")
     input_data = input_data.apply(pd.Series.interpolate, args=("time",))
     input_data = input_data.fillna(method="backfill")
     input_data["time"] = input_data.index
     input_data["time"] = input_data["time"].astype("int64")
+
+    if limit > len(input_data.index):
+        limit = len(input_data.index)
+    input_data = input_data.iloc[offset:limit]
 
     print("Total Data length: %d" % (len(input_data.index)))
 
@@ -123,7 +124,7 @@ def load_data(
         for base in range(0, len(train_data_accel), window_step)
     ]
     train_data_tac = [
-        train_data_tac[base : base + window]
+        stats.mode(train_data_tac[base : base + window], keepdims=True)[0][0]
         for base in range(0, len(train_data_tac), window_step)
     ]
 
@@ -133,7 +134,7 @@ def load_data(
         for base in range(0, len(test_data_accel), window_step)
     ]
     test_data_tac = [
-        test_data_tac[base : base + window]
+        stats.mode(test_data_tac[base : base + window], keepdims=True)[0][0]
         for base in range(0, len(test_data_tac), window_step)
     ]
 
