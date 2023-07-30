@@ -10,9 +10,9 @@ from encoders import HdcRbfEncoder
 from encoders import RcnHdcEncoder
 from encoders import HdcSinusoidNgramEncoder
 from encoders import HdcGenericEncoder
-from data_combined_reader import load_data
 from data_combined_reader import load_accel_data_full
 from data_combined_reader import is_greater_than
+from data_combined_reader import load_combined_data
 import torchmetrics
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
@@ -27,17 +27,11 @@ DIMENSIONS = 6000
 NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
+TRAINING_EPOCHS = 1
 
 # Data windowing settings
 WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
-WINDOW_STEP = 50
-START_OFFSET = 0
-END_INDEX = np.inf
-TRAINING_EPOCHS = 1
-SAMPLE_RATE = 20  # Hz
-RCN_SAMPLE_RATE = 5  # Hz
-TEST_RATIO = 0.25
-MOTION_EPSILON = 0.001
+MOTION_EPSILON = 0.0
 
 # Encoder options
 USE_LEVEL_ENCODER = 0
@@ -94,38 +88,7 @@ def load_all_pid_data(mode: int):
     global train_data_set
     global test_data_set
 
-    sample_rate = SAMPLE_RATE
-    if mode == 2:
-        # Lower sample rate for RCN encoder
-        sample_rate = RCN_SAMPLE_RATE
-    for pid in PIDS1:
-        # Load data from CSVs
-        train_set, test_set = load_data(
-            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
-        )
-        for d in train_set:
-            train_data_set.append(d)
-        for d in test_set:
-            test_data_set.append(d)
-    # Get subset of data for these pids
-    for pid in PIDS2:
-        # Load data from CSVs
-        if pid == "CC6740":
-            end_index = 500000
-        elif pid == "SA0297":
-            end_index = 1000000
-        else:
-            end_index = END_INDEX
-        train_set, test_set = load_data(
-            pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, sample_rate, TEST_RATIO
-        )
-        for d in train_set:
-            train_data_set.append(d)
-        for d in test_set:
-            test_data_set.append(d)
-    print("Randomly shuffle windows")
-    random.shuffle(train_data_set)
-    random.shuffle(test_data_set)
+    train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2)
 
 
 # Run train for a given pid, with provided model and encoder
@@ -303,7 +266,8 @@ if __name__ == "__main__":
                 elif currentValue == str(1):
                     mode = USE_RBF_ENCODER
                 elif currentValue == str(2):
-                    mode = USE_RCN_ENCODER
+                    print("RCN encoder is not available for this experiment")
+                    exit()
                 elif currentValue == str(3):
                     mode = USE_SINUSOID_NGRAM_ENCODER
                 elif currentValue == str(4):
@@ -313,7 +277,7 @@ if __name__ == "__main__":
 
         print("Multi-PID-Tests for %s encoder" % encoder_mode_str(mode))
         # Load datasets in windowed format
-        load_accel_data_full()
+        # load_accel_data_full()
         load_all_pid_data(mode)
 
         with open(

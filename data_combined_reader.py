@@ -4,6 +4,8 @@ import numpy as np
 import sklearn
 import pandas as pd
 import torch
+import random
+import pickle
 from tqdm import tqdm
 from scipy import stats
 from python_speech_features import mfcc
@@ -14,6 +16,16 @@ TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 
 MS_PER_SEC = 1000
+
+# Data windowing settings
+WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
+WINDOW_STEP = 100  # 5 second step: 5 seconds * 20Hz = 100 samples per step
+START_OFFSET = 0
+END_INDEX = np.inf
+TRAINING_EPOCHS = 1
+SAMPLE_RATE = 20  # Hz
+TEST_RATIO = 0.25
+MOTION_EPSILON = 0.0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PIDS = [
@@ -60,7 +72,28 @@ def load_accel_data_full():
     accel_data_full = accel_data_full.set_index("time")
 
 
-# Load data from CSVs
+def load_combined_data(pids: list):
+    train_data_set = []
+    test_data_set = []
+    print("Reading in all data")
+    for pid in pids:
+        # Load from PKLs
+        with open("data/%s_random_train_set.pkl" % pid, "rb") as file:
+            train_set = pickle.load(file)
+        with open("data/%s_random_test_set.pkl" % pid, "rb") as file:
+            test_set = pickle.load(file)
+        for d in train_set:
+            train_data_set.append(d)
+        for d in test_set:
+            test_data_set.append(d)
+    print("Randomly shuffle windows")
+    random.shuffle(train_data_set)
+    random.shuffle(test_data_set)
+
+    return (train_data_set, test_data_set)
+
+
+# Load data from CSVs into PKL files
 def load_data(
     pid: str,
     limit: int,
@@ -132,6 +165,22 @@ def load_data(
         for base in range(0, len(tac_data_labels), window_step)
     ]
 
+    # Removing zeroed windows
+    print("Removing zeroed accel data windows")
+    zero_windows_i = []
+    for i in range(0, len(data_accel_w)):
+        if is_greater_than(data_accel_w[i], MOTION_EPSILON) == False:
+            zero_windows_i.append(i)
+    data_accel_w = [
+        w for w in data_accel_w if w not in [data_accel_w[i] for i in zero_windows_i]
+    ]
+    data_feat_w = [
+        w for w in data_feat_w if w not in [data_feat_w[i] for i in zero_windows_i]
+    ]
+    data_tac_w = [
+        w for w in data_tac_w if w not in [data_tac_w[i] for i in zero_windows_i]
+    ]
+
     print("Creating data sets")
     # Split data into two parts
     (
@@ -156,7 +205,11 @@ def load_data(
     test_set = list(zip(test_data_accel, test_data_feat, test_data_tac))
     print("Number of Windows For Testing: %d" % (test_length))
 
-    return (train_set, test_set)
+    with open("data/%s_random_train_set.pkl" % pid, "wb") as file:
+        pickle.dump(train_set, file)
+
+    with open("data/%s_random_test_set.pkl" % pid, "wb") as file:
+        pickle.dump(test_set, file)
 
 
 def is_greater_than(x: torch.Tensor, eps: float):
@@ -191,3 +244,21 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int, win_step: 
     mfcc_cov_z = mfcc_feat_z @ mfcc_feat_z.T
     mfcc_cov = np.concatenate((mfcc_cov_x, mfcc_cov_y, mfcc_cov_z))
     return mfcc_cov.flatten()
+
+
+if __name__ == "__main__":
+    load_accel_data_full()
+    print("Reading in all data")
+    for pid in PIDS:
+        # Load data from CSVs
+        end_index = END_INDEX
+        if pid == "CC6740":
+            end_index = 500000
+        elif pid == "SA0297":
+            end_index = 1000000
+        else:
+            end_index = END_INDEX
+        # Load data from CSVs
+        load_data(
+            pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
+        )
