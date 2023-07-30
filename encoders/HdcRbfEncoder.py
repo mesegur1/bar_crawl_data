@@ -22,9 +22,10 @@ class HdcRbfEncoder(torch.nn.Module):
             self.kernel = embeddings.Sinusoid(
                 timestamps * NUM_CHANNEL, out_dimension, dtype=torch.float64
             )
+        self.feat_kernel = embeddings.Sinusoid(6, out_dimension, dtype=torch.float64)
 
-    # Encode window of feature vectors (x,y,z)
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    # Encode window of feature vectors (x,y,z) and feature vectors (f,)
+    def forward(self, input: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         # Get features from x, y, z samples
         window = input.size(0)  # sample count
         if window < self.timestamps:
@@ -45,7 +46,10 @@ class HdcRbfEncoder(torch.nn.Module):
             z_signal = input[:, 3]
         features = torch.cat((x_signal, y_signal, z_signal))
         # Use kernel encoder
-        sample_hv = self.kernel(features).sign()
+        sample_hv = self.kernel(features)
+        # Encode calculated features
+        sample_f_hv = self.feat_kernel(feat)
+        sample_hv = sample_hv * sample_f_hv
         # Apply activation function
-        sample_hv = torch.sin(sample_hv)
+        sample_hv = torchhd.hard_quantize(sample_hv)  # torch.sin(sample_hv)
         return sample_hv.squeeze(0)

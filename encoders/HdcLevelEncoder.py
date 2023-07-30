@@ -1,14 +1,16 @@
 import torch
 import numpy as np
 import torchhd
-from torchhd import embeddings
 
-SIGNAL_X_MIN = -3
-SIGNAL_X_MAX = 3
-SIGNAL_Y_MIN = -3
-SIGNAL_Y_MAX = 3
-SIGNAL_Z_MIN = -3
-SIGNAL_Z_MAX = 3
+# from torchhd import embeddings
+from torchhd_custom import embeddings
+
+SIGNAL_X_MIN = -5
+SIGNAL_X_MAX = 5
+SIGNAL_Y_MIN = -5
+SIGNAL_Y_MAX = 5
+SIGNAL_Z_MIN = -5
+SIGNAL_Z_MAX = 5
 
 
 # HDC Encoder for Bar Crawl Data
@@ -41,8 +43,10 @@ class HdcLevelEncoder(torch.nn.Module):
             timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
         )
 
-    # Encode window of feature vectors (x,y,z)
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        self.feat_kernel = embeddings.Sinusoid(6, out_dimension, dtype=torch.float64)
+
+    # Encode window of raw vectors (x,y,z) and feature vectors (f,)
+    def forward(self, input: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         # Get level hypervectors for x, y, z samples
         x_signal = torch.clamp(input[:, 1], min=SIGNAL_X_MIN, max=SIGNAL_X_MAX)
         y_signal = torch.clamp(input[:, 2], min=SIGNAL_Y_MIN, max=SIGNAL_Y_MAX)
@@ -53,8 +57,11 @@ class HdcLevelEncoder(torch.nn.Module):
         # Get time hypervectors
         times = self.timestamps(input[:, 0])
         # Bind time sequence for x, y, z samples
-        sample_hvs = x_levels * y_levels * z_levels * times
-        sample_hv = torchhd.multiset(sample_hvs).sign()
+        sample_hvs = (x_levels + y_levels + z_levels) * times
+        sample_hv = torchhd.multibind(sample_hvs)
+        # Encode calculated features
+        sample_f_hv = self.feat_kernel(feat)
+        sample_hv = sample_hv * sample_f_hv
         # Apply activation function
-        sample_hv = torch.sin(sample_hv)
-        return sample_hv
+        sample_hv = torchhd.hard_quantize(sample_hv)  # torch.sin(sample_hv)
+        return sample_hv.flatten()

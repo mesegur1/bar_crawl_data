@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from rctorch_mod import *
 import torchhd
+from torchhd import embeddings
 
 NUM_CHANNELS = 3
 NUM_RCN_NODES = 100
@@ -32,6 +33,7 @@ class RcnHdcEncoder(torch.nn.Module):
         self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
+        self.feat_kernel = embeddings.Sinusoid(6, out_dimension, dtype=torch.float32)
 
     # Generate n x d matrix with orthogonal rows
     def generate_basis(self, features: int, dimension: int):
@@ -41,8 +43,8 @@ class RcnHdcEncoder(torch.nn.Module):
         # return n x d matrix as a tensor
         return torch.tensor(M, dtype=torch.float32, device=self.my_device)
 
-    # Encode window of feature vectors (x,y,z)
-    def forward(self, signals: torch.Tensor) -> torch.Tensor:
+    # Encode window of feature vectors (x,y,z) and feature vectors (f,)
+    def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         if (
             signals.dim() == 2
             and signals.size(dim=0) > 2
@@ -69,4 +71,7 @@ class RcnHdcEncoder(torch.nn.Module):
             sample_hv = torch.sin(sample_hv)
         else:
             sample_hv = torch.zeros_like(self.x_basis[0])
-        return sample_hv.double()
+        # Encode calculated features
+        sample_f_hv = self.feat_kernel(feat.float())
+        sample_hv = sample_hv * sample_f_hv
+        return sample_hv.double().flatten()

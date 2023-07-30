@@ -8,8 +8,10 @@ from encoders import HdcLevelEncoder
 from encoders import HdcRbfEncoder
 from encoders import RcnHdcEncoder
 from encoders import HdcSinusoidNgramEncoder
+from encoders import HdcGenericEncoder
 from data_reader import load_data
 from data_reader import load_accel_data_full
+from data_reader import is_greater_than
 import torchmetrics
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
@@ -26,20 +28,22 @@ NUM_TAC_LEVELS = 2
 LEARNING_RATE = 0.005
 
 # Data windowing settings
-WINDOW = 100
+WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
 WINDOW_STEP = 50
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
-SAMPLE_RATE = 20
-RCN_SAMPLE_RATE = 5
+SAMPLE_RATE = 20  # Hz
+RCN_SAMPLE_RATE = 5  # Hz
 TEST_RATIO = 0.30
+MOTION_EPSILON = 0.001
 
 # Encoder options
 USE_LEVEL_ENCODER = 0
 USE_RBF_ENCODER = 1
 USE_RCN_ENCODER = 2
 USE_SINUSOID_NGRAM_ENCODER = 3
+USE_GENERIC_ENCODER = 4
 
 
 def encoder_mode_str(mode: int):
@@ -51,6 +55,8 @@ def encoder_mode_str(mode: int):
         return "rcn"
     elif mode == USE_SINUSOID_NGRAM_ENCODER:
         return "sinusoid-ngram"
+    elif mode == USE_GENERIC_ENCODER:
+        return "generic"
     else:
         return "unknown"
 
@@ -112,33 +118,45 @@ def run_train_for_pid(
             with torch.no_grad():
                 for e in range(0, TRAINING_EPOCHS):
                     print("Training Epoch %d" % (e))
-                    for x, y in tqdm(train_set):
+                    for x, f, y in tqdm(train_set):
+                        if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
+                            input_tensor = torch.tensor(
+                                x, dtype=torch.float64, device=device
+                            )
+                            input_feat_tensor = torch.tensor(
+                                f, dtype=torch.float64, device=device
+                            )
+                            input_hypervector = encode(input_tensor, input_feat_tensor)
+                            input_hypervector = input_hypervector.unsqueeze(0)
+                            label_tensor = torch.tensor(
+                                y, dtype=torch.int64, device=device
+                            )
+                            label_tensor = label_tensor.unsqueeze(0)
+                            model.add_adjust_iterative(
+                                input_hypervector, label_tensor, lr=LEARNING_RATE
+                            )
+                            writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
+                            file.flush()
+            file.close()
+    else:
+        with torch.no_grad():
+            for e in range(0, TRAINING_EPOCHS):
+                print("Training Epoch %d" % (e))
+                for x, f, y in tqdm(train_set):
+                    if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
                         input_tensor = torch.tensor(
                             x, dtype=torch.float64, device=device
                         )
-                        input_hypervector = encode(input_tensor)
+                        input_feat_tensor = torch.tensor(
+                            f, dtype=torch.float64, device=device
+                        )
+                        input_hypervector = encode(input_tensor, input_feat_tensor)
                         input_hypervector = input_hypervector.unsqueeze(0)
                         label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                         label_tensor = label_tensor.unsqueeze(0)
                         model.add_adjust_iterative(
                             input_hypervector, label_tensor, lr=LEARNING_RATE
                         )
-                        writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
-                        file.flush()
-            file.close()
-    else:
-        with torch.no_grad():
-            for e in range(0, TRAINING_EPOCHS):
-                print("Training Epoch %d" % (e))
-                for x, y in tqdm(train_set):
-                    input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                    input_hypervector = encode(input_tensor)
-                    input_hypervector = input_hypervector.unsqueeze(0)
-                    label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
-                    label_tensor = label_tensor.unsqueeze(0)
-                    model.add_adjust_iterative(
-                        input_hypervector, label_tensor, lr=LEARNING_RATE
-                    )
 
 
 def run_test_for_pid(
@@ -163,9 +181,38 @@ def run_test_for_pid(
             y_true = []
             preds = []
             with torch.no_grad():
-                for x, y in tqdm(test_set):
+                for x, f, y in tqdm(test_set):
+                    if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
+                        query_tensor = torch.tensor(
+                            x, dtype=torch.float64, device=device
+                        )
+                        query_feat_tensor = torch.tensor(
+                            f, dtype=torch.float64, device=device
+                        )
+                        query_hypervector = encode(query_tensor, query_feat_tensor)
+                        output = model(query_hypervector, dot=False)
+                        y_pred = torch.argmax(output).unsqueeze(0).to(device)
+                        label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
+                        label_tensor = label_tensor.unsqueeze(0)
+                        accuracy.update(y_pred, label_tensor)
+                        preds.append(y_pred.item())
+                        y_true.append(label_tensor.item())
+                        writer.writerow(
+                            (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
+                        )
+                        file.flush()
+            file.close()
+    else:
+        y_true = []
+        preds = []
+        with torch.no_grad():
+            for x, f, y in tqdm(test_set):
+                if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
                     query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                    query_hypervector = encode(query_tensor)
+                    query_feat_tensor = torch.tensor(
+                        f, dtype=torch.float64, device=device
+                    )
+                    query_hypervector = encode(query_tensor, query_feat_tensor)
                     output = model(query_hypervector, dot=False)
                     y_pred = torch.argmax(output).unsqueeze(0).to(device)
                     label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
@@ -173,25 +220,6 @@ def run_test_for_pid(
                     accuracy.update(y_pred, label_tensor)
                     preds.append(y_pred.item())
                     y_true.append(label_tensor.item())
-                    writer.writerow(
-                        (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
-                    )
-                    file.flush()
-            file.close()
-    else:
-        y_true = []
-        preds = []
-        with torch.no_grad():
-            for x, y in tqdm(test_set):
-                query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
-                query_hypervector = encode(query_tensor)
-                output = model(query_hypervector, dot=False)
-                y_pred = torch.argmax(output).unsqueeze(0).to(device)
-                label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
-                label_tensor = label_tensor.unsqueeze(0)
-                accuracy.update(y_pred, label_tensor)
-                preds.append(y_pred.item())
-                y_true.append(label_tensor.item())
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     f1 = f1_score(y_true, preds, zero_division=0)
@@ -214,10 +242,15 @@ def run_individual_train_and_test_for_pid(pid: str, encoder_option: int):
         encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
     elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
         encode = HdcSinusoidNgramEncoder.HdcSinusoidNgramEncoder(DIMENSIONS)
+    elif encoder_option == USE_GENERIC_ENCODER:
+        encode = HdcGenericEncoder.HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
     run_train_for_pid(pid, model, encode)
+
+    print("Normalizing model")
+    model.normalize()
 
     # Run Testing
     accuracy = run_test_for_pid(pid, model, encode)
@@ -253,6 +286,8 @@ if __name__ == "__main__":
                     mode = USE_RCN_ENCODER
                 elif currentValue == str(3):
                     mode = USE_SINUSOID_NGRAM_ENCODER
+                elif currentValue == str(4):
+                    mode = USE_GENERIC_ENCODER
                 else:
                     mode = USE_LEVEL_ENCODER
 

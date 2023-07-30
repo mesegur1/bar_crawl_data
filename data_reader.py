@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 from scipy import stats
+from python_speech_features import mfcc
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -119,28 +120,90 @@ def load_data(
     test_length = test_data_accel.shape[0]
 
     # Change training data to be windowed
-    train_data_accel = [
+    train_data_accel_w = [
         train_data_accel[base : base + window]
         for base in range(0, len(train_data_accel), window_step)
     ]
-    train_data_tac = [
+    train_data_feat_w = [
+        np.concatenate(
+            (
+                accel_rms(train_data_accel[base : base + window, 1:]),
+                accel_mfcc_cov(
+                    train_data_accel[base : base + window, 1:],
+                    sample_rate,
+                    window,
+                    window_step,
+                ),
+            )
+        )
+        for base in range(0, len(train_data_accel), window_step)
+    ]
+    train_data_tac_w = [
         stats.mode(train_data_tac[base : base + window], keepdims=True)[0][0]
         for base in range(0, len(train_data_tac), window_step)
     ]
 
     # Change test data to be windowed
-    test_data_accel = [
+    test_data_accel_w = [
         test_data_accel[base : base + window]
         for base in range(0, len(test_data_accel), window_step)
     ]
-    test_data_tac = [
+    test_data_feat_w = [
+        np.concatenate(
+            (
+                accel_rms(test_data_accel[base : base + window, 1:]),
+                accel_mfcc_cov(
+                    test_data_accel[base : base + window, 1:],
+                    sample_rate,
+                    window,
+                    window_step,
+                ),
+            )
+        )
+        for base in range(0, len(test_data_accel), window_step)
+    ]
+    test_data_tac_w = [
         stats.mode(test_data_tac[base : base + window], keepdims=True)[0][0]
         for base in range(0, len(test_data_tac), window_step)
     ]
 
-    train_set = tuple(zip(train_data_accel, train_data_tac))
+    train_set = tuple(zip(train_data_accel_w, train_data_feat_w, train_data_tac_w))
     print("Data Length For Training: %d" % (train_length))
-    test_set = tuple(zip(test_data_accel, test_data_tac))
+    test_set = tuple(zip(test_data_accel_w, test_data_feat_w, test_data_tac_w))
     print("Data Length For Testing: %d" % (test_length))
 
     return (train_set, test_set)
+
+
+def is_greater_than(x: torch.Tensor, eps: float):
+    count = (x > eps).sum()
+    if count > 0:
+        return True
+    return False
+
+
+def accel_rms(xyz: np.ndarray):
+    rms = np.sqrt(np.mean(np.square(xyz), axis=0))
+    return rms.flatten()
+
+
+def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int, win_step: int):
+    window_s = float(win_len / sample_rate)
+    window_step_s = float(win_step / sample_rate)
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    mfcc_feat_x = mfcc(
+        x, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    )
+    mfcc_cov_x = mfcc_feat_x @ mfcc_feat_x.T
+    mfcc_feat_y = mfcc(
+        y, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    )
+    mfcc_cov_y = mfcc_feat_y @ mfcc_feat_y.T
+    mfcc_feat_z = mfcc(
+        z, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    )
+    mfcc_cov_z = mfcc_feat_z @ mfcc_feat_z.T
+    mfcc_cov = np.concatenate((mfcc_cov_x, mfcc_cov_y, mfcc_cov_z))
+    return mfcc_cov.flatten()
