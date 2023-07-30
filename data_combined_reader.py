@@ -18,12 +18,12 @@ TAC_LEVEL_1 = 1  # >= 0.080 g/dl
 MS_PER_SEC = 1000
 
 # Data windowing settings
-WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
-WINDOW_STEP = 100  # 5 second step: 5 seconds * 20Hz = 100 samples per step
+WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per window
+WINDOW_STEP = 360  # 8 second step: 9 seconds * 40Hz = 360 samples per step
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
-SAMPLE_RATE = 20  # Hz
+SAMPLE_RATE = 40  # Hz
 TEST_RATIO = 0.25
 MOTION_EPSILON = 0.0
 
@@ -90,7 +90,11 @@ def load_combined_data(pids: list):
     random.shuffle(train_data_set)
     random.shuffle(test_data_set)
 
-    return (train_data_set, test_data_set)
+    window = WINDOW
+    with open("data/window_size.pkl", "rb") as file:
+        window = pickle.load(file)
+
+    return (window, train_data_set, test_data_set)
 
 
 # Load data from CSVs into PKL files
@@ -252,13 +256,16 @@ if __name__ == "__main__":
     for pid in PIDS:
         # Load data from CSVs
         end_index = END_INDEX
-        if pid == "CC6740":
-            end_index = 500000
-        elif pid == "SA0297":
-            end_index = 1000000
-        else:
-            end_index = END_INDEX
+        # if pid == "CC6740":
+        #     end_index = 500000
+        # elif pid == "SA0297":
+        #     end_index = 1000000
+        # else:
+        #     end_index = END_INDEX
         # Load data from CSVs
         load_data(
             pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
         )
+
+    with open("data/window_size.pkl", "wb") as file:
+        pickle.dump(WINDOW, file)

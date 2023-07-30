@@ -26,12 +26,12 @@ import getopt, sys
 DIMENSIONS = 6000
 NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
-LEARNING_RATE = 0.005
-TRAINING_EPOCHS = 1
+DEFAULT_LEARNING_RATE = 0.005
+DEFAULT_TRAINING_EPOCHS = 1
 
-# Data windowing settings
-WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
-MOTION_EPSILON = 0.0
+# Data windowing settings (this is actually read from PKL data files,
+# but we provide a default here)
+DEFAULT_WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per window
 
 # Encoder options
 USE_LEVEL_ENCODER = 0
@@ -63,36 +63,44 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 train_data_set = []
 test_data_set = []
-#                            This one  This one also
-# PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
-#
+window = DEFAULT_WINDOW
+
+PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
+
 PIDS2 = ["CC6740", "SA0297"]
 
-PIDS1 = [
-    "BK7610",
-    "BU4707",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SF3079",
-]
+# PIDS1 = [
+#     "BK7610",
+#     "BU4707",
+#     "DC6359",
+#     "DK3500",
+#     "HV0618",
+#     "JB3156",
+#     "JR8022",
+#     "MC7070",
+#     "MJ8002",
+#     "PC6771",
+#     "SF3079",
+# ]
 
 
 # Load all data for each pid
 def load_all_pid_data(mode: int):
     global train_data_set
     global test_data_set
+    global window
 
-    train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2)
+    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2)
 
 
 # Run train for a given pid, with provided model and encoder
-def run_train(model: models.Centroid, encode: torch.nn.Module, write_file: bool = True):
+def run_train(
+    model: models.Centroid,
+    encode: torch.nn.Module,
+    train_epochs: int = 1,
+    lr: float = DEFAULT_LEARNING_RATE,
+    write_file: bool = True,
+):
     # Train using training set half
     print("Begin training")
     if write_file == True:
@@ -103,34 +111,9 @@ def run_train(model: models.Centroid, encode: torch.nn.Module, write_file: bool 
         ) as file:
             writer = csv.writer(file)
             with torch.no_grad():
-                for e in range(0, TRAINING_EPOCHS):
+                for e in range(0, train_epochs):
                     print("Training Epoch %d" % (e))
                     for x, f, y in tqdm(train_data_set):
-                        if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
-                            input_tensor = torch.tensor(
-                                x, dtype=torch.float64, device=device
-                            )
-                            input_feat_tensor = torch.tensor(
-                                f, dtype=torch.float64, device=device
-                            )
-                            input_hypervector = encode(input_tensor, input_feat_tensor)
-                            input_hypervector = input_hypervector.unsqueeze(0)
-                            label_tensor = torch.tensor(
-                                y, dtype=torch.int64, device=device
-                            )
-                            label_tensor = label_tensor.unsqueeze(0)
-                            model.add_adjust_iterative(
-                                input_hypervector, label_tensor, lr=LEARNING_RATE
-                            )
-                            writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
-                            file.flush()
-            file.close()
-    else:
-        with torch.no_grad():
-            for e in range(0, TRAINING_EPOCHS):
-                print("Training Epoch %d" % (e))
-                for x, f, y in tqdm(train_data_set):
-                    if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
                         input_tensor = torch.tensor(
                             x, dtype=torch.float64, device=device
                         )
@@ -142,8 +125,25 @@ def run_train(model: models.Centroid, encode: torch.nn.Module, write_file: bool 
                         label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                         label_tensor = label_tensor.unsqueeze(0)
                         model.add_adjust_iterative(
-                            input_hypervector, label_tensor, lr=LEARNING_RATE
+                            input_hypervector, label_tensor, lr=lr
                         )
+                        writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
+                        file.flush()
+            file.close()
+    else:
+        with torch.no_grad():
+            for e in range(0, train_epochs):
+                print("Training Epoch %d" % (e))
+                for x, f, y in tqdm(train_data_set):
+                    input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                    input_feat_tensor = torch.tensor(
+                        f, dtype=torch.float64, device=device
+                    )
+                    input_hypervector = encode(input_tensor, input_feat_tensor)
+                    input_hypervector = input_hypervector.unsqueeze(0)
+                    label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
+                    label_tensor = label_tensor.unsqueeze(0)
+                    model.add_adjust_iterative(input_hypervector, label_tensor, lr=lr)
 
 
 def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool = True):
@@ -165,32 +165,6 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
             preds = []
             with torch.no_grad():
                 for x, f, y in tqdm(test_data_set):
-                    if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
-                        query_tensor = torch.tensor(
-                            x, dtype=torch.float64, device=device
-                        )
-                        query_feat_tensor = torch.tensor(
-                            f, dtype=torch.float64, device=device
-                        )
-                        query_hypervector = encode(query_tensor, query_feat_tensor)
-                        output = model(query_hypervector, dot=False)
-                        y_pred = torch.argmax(output).unsqueeze(0).to(device)
-                        label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
-                        label_tensor = label_tensor.unsqueeze(0)
-                        accuracy.update(y_pred, label_tensor)
-                        preds.append(y_pred.item())
-                        y_true.append(label_tensor.item())
-                        writer.writerow(
-                            (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
-                        )
-                        file.flush()
-            file.close()
-    else:
-        y_true = []
-        preds = []
-        with torch.no_grad():
-            for x, f, y in tqdm(test_data_set):
-                if is_greater_than(x[:, 1:], MOTION_EPSILON) == True:
                     query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                     query_feat_tensor = torch.tensor(
                         f, dtype=torch.float64, device=device
@@ -203,6 +177,26 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
                     accuracy.update(y_pred, label_tensor)
                     preds.append(y_pred.item())
                     y_true.append(label_tensor.item())
+                    writer.writerow(
+                        (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
+                    )
+                    file.flush()
+            file.close()
+    else:
+        y_true = []
+        preds = []
+        with torch.no_grad():
+            for x, f, y in tqdm(test_data_set):
+                query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                query_feat_tensor = torch.tensor(f, dtype=torch.float64, device=device)
+                query_hypervector = encode(query_tensor, query_feat_tensor)
+                output = model(query_hypervector, dot=False)
+                y_pred = torch.argmax(output).unsqueeze(0).to(device)
+                label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
+                label_tensor = label_tensor.unsqueeze(0)
+                accuracy.update(y_pred, label_tensor)
+                preds.append(y_pred.item())
+                y_true.append(label_tensor.item())
 
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     f1 = f1_score(y_true, preds, zero_division=0)
@@ -211,16 +205,16 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
 
 
 # Run a test
-def run_train_and_test(encoder_option: int):
+def run_train_and_test(encoder_option: int, train_epochs: int, lr: float):
     # Create Centroid model
     model = models.Centroid(
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
     )
     # Create Encoder module
     if encoder_option == USE_LEVEL_ENCODER:
-        encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, WINDOW, DIMENSIONS)
+        encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
     elif encoder_option == USE_RBF_ENCODER:
-        encode = HdcRbfEncoder.HdcRbfEncoder(WINDOW, DIMENSIONS, USE_TANH)
+        encode = HdcRbfEncoder.HdcRbfEncoder(window, DIMENSIONS, USE_TANH)
     elif encoder_option == USE_RCN_ENCODER:
         encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
     elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
@@ -230,7 +224,7 @@ def run_train_and_test(encoder_option: int):
     encode = encode.to(device)
 
     # Run training
-    run_train(model, encode)
+    run_train(model, encode, train_epochs, lr)
 
     print("Normalizing model")
     model.normalize()
@@ -249,15 +243,17 @@ if __name__ == "__main__":
     argumentList = sys.argv[1:]
 
     # Options
-    options = "e:"
+    options = "e:t:l:"
 
     # Long options
-    long_options = ["Encoder="]
+    long_options = ["Encoder=", "Epochs=", "LearningRate="]
 
     try:
         # Parsing argument
         arguments, values = getopt.getopt(argumentList, options, long_options)
         mode = 0
+        train_epochs = DEFAULT_TRAINING_EPOCHS
+        lr = DEFAULT_LEARNING_RATE
         # Checking each argument
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
@@ -274,19 +270,35 @@ if __name__ == "__main__":
                     mode = USE_GENERIC_ENCODER
                 else:
                     mode = USE_LEVEL_ENCODER
+            elif currentArgument in ("-t", "--Epochs"):
+                if currentValue.isnumeric():
+                    train_epochs = int(currentValue)
+                    if train_epochs < DEFAULT_TRAINING_EPOCHS:
+                        train_epochs = DEFAULT_TRAINING_EPOCHS
+            elif currentArgument in ("-l", "--LearningRate"):
+                try:
+                    lr = float(currentValue)
+                except ValueError:
+                    lr = DEFAULT_LEARNING_RATE
+                if lr < 0:
+                    lr = DEFAULT_LEARNING_RATE
 
-        print("Multi-PID-Tests for %s encoder" % encoder_mode_str(mode))
+        print(
+            "Multi-PID-Tests for %s encoder, with %d train epochs, and lr=%.5f"
+            % (encoder_mode_str(mode), train_epochs, lr)
+        )
         # Load datasets in windowed format
         # load_accel_data_full()
         load_all_pid_data(mode)
 
         with open(
-            "results/hdc_output_combined_%s.csv" % encoder_mode_str(mode),
+            "results/hdc_output_combined_%s_%d_%.5f.csv"
+            % (encoder_mode_str(mode), train_epochs, lr),
             "w",
             newline="",
         ) as file:
             writer = csv.writer(file)
-            accuracy, f1 = run_train_and_test(mode)
+            accuracy, f1 = run_train_and_test(mode, train_epochs, lr)
             writer.writerow([accuracy, f1])
             file.flush()
             file.close()
