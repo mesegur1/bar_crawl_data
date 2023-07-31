@@ -29,7 +29,7 @@ LEARNING_RATE = 0.005
 
 # Data windowing settings
 WINDOW = 200  # 10 second window: 10 seconds * 20Hz = 200 samples per window
-WINDOW_STEP = 50
+WINDOW_STEP = 150
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1

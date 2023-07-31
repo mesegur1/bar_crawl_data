@@ -65,23 +65,23 @@ train_data_set = []
 test_data_set = []
 window = DEFAULT_WINDOW
 
-PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
+# PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
 
 PIDS2 = ["CC6740", "SA0297"]
 
-# PIDS1 = [
-#     "BK7610",
-#     "BU4707",
-#     "DC6359",
-#     "DK3500",
-#     "HV0618",
-#     "JB3156",
-#     "JR8022",
-#     "MC7070",
-#     "MJ8002",
-#     "PC6771",
-#     "SF3079",
-# ]
+PIDS1 = [
+    "BK7610",
+    "BU4707",
+    "DC6359",
+    "DK3500",
+    "HV0618",
+    "JB3156",
+    "JR8022",
+    "MC7070",
+    "MJ8002",
+    "PC6771",
+    "SF3079",
+]
 
 
 # Load all data for each pid
@@ -279,6 +279,7 @@ if __name__ == "__main__":
                 try:
                     lr = float(currentValue)
                 except ValueError:
+                    print("Defaulting learning rate to %.5f" % DEFAULT_LEARNING_RATE)
                     lr = DEFAULT_LEARNING_RATE
                 if lr < 0:
                     lr = DEFAULT_LEARNING_RATE

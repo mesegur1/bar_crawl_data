@@ -33,7 +33,7 @@ class RcnHdcEncoder(torch.nn.Module):
         self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
-        self.feat_kernel = embeddings.Sinusoid(6, out_dimension, dtype=torch.float32)
+        self.feat_kernel = embeddings.Sinusoid(12, out_dimension, dtype=torch.float32)
 
     # Generate n x d matrix with orthogonal rows
     def generate_basis(self, features: int, dimension: int):
