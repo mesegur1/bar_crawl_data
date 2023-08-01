@@ -11,6 +11,12 @@ RCN_SPECTRAL_RADIUS = 1.0
 RCN_REGULARIZATION = 1.3
 RCN_LEAKING_RATE = 0.12
 RCN_BIAS = 0.49
+NUM_RMS = 3
+NUM_MFCC = 3
+NUM_FFT_MEAN = 3
+NUM_FFT_MAX = 3
+NUM_FFT_VAR = 3
+NUM_FEAT = NUM_RMS + NUM_MFCC + NUM_FFT_MEAN + NUM_FFT_MAX + NUM_FFT_VAR
 
 
 # RCN-HDC Encoder for Bar Crawl Data
@@ -33,7 +39,7 @@ class RcnHdcEncoder(torch.nn.Module):
         self.x_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.y_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
         self.z_basis = self.generate_basis(NUM_RCN_NODES + NUM_CHANNELS, out_dimension)
-        self.feat_kernel = embeddings.Sinusoid(12, out_dimension, dtype=torch.float32)
+        self.feat_kernel = embeddings.Sinusoid(NUM_FEAT, out_dimension, dtype=torch.float32)
 
     # Generate n x d matrix with orthogonal rows
     def generate_basis(self, features: int, dimension: int):

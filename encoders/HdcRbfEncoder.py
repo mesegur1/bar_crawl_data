@@ -87,9 +87,7 @@ class HdcRbfEncoder(torch.nn.Module):
             sample_hv
             * sample_f1_hv
             * sample_f2_hv
-            * sample_f3_hv
-            * sample_f4_hv
-            * sample_f5_hv
+            * (sample_f3_hv + sample_f4_hv + sample_f5_hv)
         )
         # Apply activation function
         sample_hv = torchhd.hard_quantize(sample_hv)  # torch.sin(sample_hv)
