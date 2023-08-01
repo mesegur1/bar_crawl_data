@@ -166,6 +166,9 @@ def load_data(
                 accel_fft_max(
                     accel_data[base : base + window, 1:],
                 ),
+                accel_fft_var(
+                    accel_data[base : base + window, 1:],
+                ),
             )
         )
         for base in range(0, len(accel_data), window_step)
@@ -255,25 +258,38 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int, win_step: 
     mfcc_cov = np.concatenate((mfcc_cov_x, mfcc_cov_y, mfcc_cov_z))
     return mfcc_cov.flatten()
 
+
 def accel_fft_mean(xyz: np.ndarray):
-    x_ffts = np.abs(np.fft.fft(xyz[:,0]))
-    y_ffts = np.abs(np.fft.fft(xyz[:,1]))
-    z_ffts = np.abs(np.fft.fft(xyz[:,2]))
+    x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
+    y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
+    z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
     x_fft_mean = x_ffts.mean()
     y_fft_mean = y_ffts.mean()
     z_fft_mean = z_ffts.mean()
 
     return np.array([x_fft_mean, y_fft_mean, z_fft_mean])
 
+
 def accel_fft_max(xyz: np.ndarray):
-    x_ffts = np.abs(np.fft.fft(xyz[:,0]))
-    y_ffts = np.abs(np.fft.fft(xyz[:,1]))
-    z_ffts = np.abs(np.fft.fft(xyz[:,2]))
+    x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
+    y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
+    z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
     x_fft_max = x_ffts.max()
     y_fft_max = y_ffts.max()
     z_fft_max = z_ffts.max()
 
     return np.array([x_fft_max, y_fft_max, z_fft_max])
+
+
+def accel_fft_var(xyz: np.ndarray):
+    x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
+    y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
+    z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
+    x_fft_var = x_ffts.var()
+    y_fft_var = y_ffts.var()
+    z_fft_var = z_ffts.var()
+
+    return np.array([x_fft_var, y_fft_var, z_fft_var])
 
 
 if __name__ == "__main__":
