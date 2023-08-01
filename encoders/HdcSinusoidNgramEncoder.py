@@ -5,7 +5,7 @@ import torchhd
 from torchhd_custom import embeddings
 
 NUM_CHANNEL = 4
-NGRAM_SIZE = 4
+NGRAM_SIZE = 3
 NUM_RMS = 3
 NUM_MFCC = 3
 NUM_FFT_MEAN = 3
