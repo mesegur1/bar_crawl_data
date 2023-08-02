@@ -169,6 +169,15 @@ def load_data(
                 accel_fft_var(
                     accel_data[base : base + window, 1:],
                 ),
+                accel_mean(
+                    accel_data[base : base + window, 1:],
+                ),
+                accel_max(
+                    accel_data[base : base + window, 1:],
+                ),
+                accel_var(
+                    accel_data[base : base + window, 1:],
+                ),
             )
         )
         for base in range(0, len(accel_data), window_step)
@@ -290,6 +299,39 @@ def accel_fft_var(xyz: np.ndarray):
     z_fft_var = z_ffts.var()
 
     return np.array([x_fft_var, y_fft_var, z_fft_var])
+
+
+def accel_mean(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_mean = x.mean()
+    y_mean = y.mean()
+    z_mean = z.mean()
+
+    return np.array([x_mean, y_mean, z_mean])
+
+
+def accel_max(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_max = x.max()
+    y_max = y.max()
+    z_max = z.max()
+
+    return np.array([x_max, y_max, z_max])
+
+
+def accel_var(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_var = x.var()
+    y_var = y.var()
+    z_var = z.var()
+
+    return np.array([x_var, y_var, z_var])
 
 
 if __name__ == "__main__":
