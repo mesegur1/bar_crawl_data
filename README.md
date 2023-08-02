@@ -1,16 +1,27 @@
 # Bar Crawl Data ML Experiments
-ML experiments with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drinking" by Killian, J. et.al.
+ML experiments (using HDC) with the Bar Crawl Dataset from "Bar Crawl: Detecting Heavy Drinking" by Killian, J. et.al.
 
-## Current experiments
-1. Pure HDC Experiment
-    1. Uses purely Hyperdimensional Computing techniques to process timeseries data.
-    2. Uses raw X,Y,Z features instead of extracting features from the frequency domain
-2. Pure HDC Experiment with RBF Kernel Encoder Trick
-    1. Uses purely Hyperdimensional Computing techniques along with kernel trick to mimic RBF kernel
-    2. Uses raw X,Y,Z features instead of extracting features from the frequency domain
-3. HDC with RCN Experiment
-    1. Uses a Reservoir Computing Network for timeseries feature extraction for use with HDC techniques of classification
-    2. The RCN uses raw X,Y,Z features and converts them to features in the frequency domain for use with HDC
+## Test Conditions Recreated
+1. 40Hz sampling
+2. 10 second windows
+3. Random shuffling of windows
+4. Split shuffled data 75/25 train and test
+5. Use few of the same metrics, in addition to raw accelerometer data
+    1. Root mean square
+    2. Mel-frequency cepstrum covariance
+    3. Mean, max, variance (time/frequency domains) for each axis
+    4. Note: Original study did not use raw accelerometer data directly
+
+
+## HDC Encoders Used
+1. HDC Level Hypervector Encoder
+    1. Uses level hypervectors to encode the time series data
+2. HDC RBF Kernel Encoder Trick
+    1. Uses kernel trick to mimic RBF kernel
+3. HDC Sinusoid Ngram Kernel Encoder Trick
+    1. Uses kernel trick + Ngram encoding
+4. HDC Generic encoding
+    1. Uses generic encoding paradigm
 
 ## Dependencies
 The following were used with Python 3.10:
@@ -24,23 +35,26 @@ The following were used with Python 3.10:
 5. Torchmetrics
 6. Tqdm
     1. For progress bars
-7. RcTorch
-    1. The official RcTorch library for the RCN implementation has bugs with the CUDA mode, so 
-       I fixed them and included the library in this project under rctorch_mod/
-    2. You should still install the official version to get all the dependencies installed
-
-You need to put a copy of all_accelerometer_data_pids_13.csv in the data/ folder. It was too big to add to Github.
 
 ## Run Instructions
 1. To run a HDC experiment, run
 ```bash
-python ./hdc_experiment.py -m <0, 1, 2>
+python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -t <epochs> -l <learning rate>
 ```
-Mode 0 means train on individual PIDs using level hypervector encoding
 
-Mode 1 means train on individual PIDs using RBF kernel trick encoding
+-e : encoder choice (0: level, 1: rbf, 2: sinusoid/ngram, 3: generic)
 
-Mode 2 means train on individual PIDs using RCN feature extraction encoding (Note: this test takes a long time)
+-t : training epochs
+
+-l : learning rate for HDC model
+
+## Dataset Recreation Instructions
+1. To recreate the PKL dataset files (new sorting), run
+```
+python ./data_combined_reader.py
+```
+
+Data will be written to ```./data/```. Options at the top of the script control data settings
 
 ## Data Plotter Instructions
 1. To plot TAC and accelerometer input data for each PID, run
@@ -58,9 +72,8 @@ Test data plots will be written to ```./data/test_data```
 Train data plots will be written to ```./data/train_data```
 
 ## Hyperparameters
-Hyperparameters for each implementation are located towards the top of hdc_experiment.py file and encoder class files.
+Hyperparameters for the experiment are located towards the top of hdc_combined_experiment.py file and encoder class files.
 These can drastically change performance.
-
 
 # Dataset Stuff
 1. Database Description:
