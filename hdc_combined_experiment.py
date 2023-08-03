@@ -7,7 +7,6 @@ from torchhd import embeddings
 from torchhd_custom import models  # from torchhd import models
 from encoders import HdcLevelEncoder
 from encoders import HdcRbfEncoder
-from encoders import RcnHdcEncoder
 from encoders import HdcSinusoidNgramEncoder
 from encoders import HdcGenericEncoder
 from data_combined_reader import load_accel_data_full
@@ -36,9 +35,8 @@ DEFAULT_WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per wi
 # Encoder options
 USE_LEVEL_ENCODER = 0
 USE_RBF_ENCODER = 1
-USE_RCN_ENCODER = 2
-USE_SINUSOID_NGRAM_ENCODER = 3
-USE_GENERIC_ENCODER = 4
+USE_SINUSOID_NGRAM_ENCODER = 2
+USE_GENERIC_ENCODER = 3
 
 
 def encoder_mode_str(mode: int):
@@ -46,8 +44,6 @@ def encoder_mode_str(mode: int):
         return "level"
     elif mode == USE_RBF_ENCODER:
         return "rbf"
-    elif mode == USE_RCN_ENCODER:
-        return "rcn"
     elif mode == USE_SINUSOID_NGRAM_ENCODER:
         return "sinusoid-ngram"
     elif mode == USE_GENERIC_ENCODER:
@@ -215,8 +211,6 @@ def run_train_and_test(encoder_option: int, train_epochs: int, lr: float):
         encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
     elif encoder_option == USE_RBF_ENCODER:
         encode = HdcRbfEncoder.HdcRbfEncoder(window, DIMENSIONS, USE_TANH)
-    elif encoder_option == USE_RCN_ENCODER:
-        encode = RcnHdcEncoder.RcnHdcEncoder(DIMENSIONS)
     elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
         encode = HdcSinusoidNgramEncoder.HdcSinusoidNgramEncoder(DIMENSIONS)
     elif encoder_option == USE_GENERIC_ENCODER:
@@ -257,16 +251,13 @@ if __name__ == "__main__":
         # Checking each argument
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
-                if currentValue == str(0):
+                if currentValue == str(USE_LEVEL_ENCODER):
                     mode = USE_LEVEL_ENCODER
-                elif currentValue == str(1):
+                elif currentValue == str(USE_RBF_ENCODER):
                     mode = USE_RBF_ENCODER
-                elif currentValue == str(2):
-                    print("RCN encoder is not available for this experiment")
-                    exit()
-                elif currentValue == str(3):
+                elif currentValue == str(USE_SINUSOID_NGRAM_ENCODER):
                     mode = USE_SINUSOID_NGRAM_ENCODER
-                elif currentValue == str(4):
+                elif currentValue == str(USE_GENERIC_ENCODER):
                     mode = USE_GENERIC_ENCODER
                 else:
                     mode = USE_LEVEL_ENCODER
