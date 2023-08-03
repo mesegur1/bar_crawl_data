@@ -38,6 +38,12 @@ USE_RBF_ENCODER = 1
 USE_SINUSOID_NGRAM_ENCODER = 2
 USE_GENERIC_ENCODER = 3
 
+# Learning mode options
+USE_ADD = 0
+USE_ADAPTHD = 1
+USE_ONLINEHD = 2
+USE_ADJUSTHD = 3
+
 
 def encoder_mode_str(mode: int):
     if mode == USE_LEVEL_ENCODER:
@@ -50,6 +56,18 @@ def encoder_mode_str(mode: int):
         return "generic"
     else:
         return "unknown"
+    
+def learning_mode_str(lmode: int):
+    if lmode == USE_ADD:
+        return "Add"
+    elif lmode == USE_ADAPTHD:
+        return "AdaptHD"
+    elif lmode == USE_ONLINEHD:
+        return "OnlineHD"
+    elif lmode == USE_ADJUSTHD:
+        return "AdjustHD"
+    else:
+        return "Add"
 
 
 # Option for RBF encoder
@@ -81,7 +99,7 @@ PIDS1 = [
 
 
 # Load all data for each pid
-def load_all_pid_data(mode: int):
+def load_all_pid_data():
     global train_data_set
     global test_data_set
     global window
@@ -93,6 +111,7 @@ def load_all_pid_data(mode: int):
 def run_train(
     model: models.Centroid,
     encode: torch.nn.Module,
+    learning_mode: int,
     train_epochs: int = 1,
     lr: float = DEFAULT_LEARNING_RATE,
     write_file: bool = True,
@@ -120,9 +139,22 @@ def run_train(
                         input_hypervector = input_hypervector.unsqueeze(0)
                         label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                         label_tensor = label_tensor.unsqueeze(0)
-                        model.add_adjust_iterative(
-                            input_hypervector, label_tensor, lr=lr
-                        )
+                        if learning_mode == USE_ADD:
+                            model.add(
+                                input_hypervector, label_tensor, lr=lr
+                            )
+                        elif learning_mode == USE_ADAPTHD:
+                            model.add_adapt(
+                                input_hypervector, label_tensor, lr=lr
+                            )
+                        elif learning_mode == USE_ONLINEHD:
+                            model.add_online(
+                                input_hypervector, label_tensor, lr=lr
+                            )
+                        elif learning_mode == USE_ADJUSTHD:
+                            model.add_adjust_iterative(
+                                input_hypervector, label_tensor, lr=lr
+                            )
                         writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
                         file.flush()
             file.close()
@@ -201,7 +233,7 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
 
 
 # Run a test
-def run_train_and_test(encoder_option: int, train_epochs: int, lr: float):
+def run_train_and_test(encoder_option: int, learning_mode: int, train_epochs: int, lr: float):
     # Create Centroid model
     model = models.Centroid(
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
@@ -218,7 +250,7 @@ def run_train_and_test(encoder_option: int, train_epochs: int, lr: float):
     encode = encode.to(device)
 
     # Run training
-    run_train(model, encode, train_epochs, lr)
+    run_train(model, encode, learning_mode, train_epochs, lr)
 
     print("Normalizing model")
     model.normalize()
@@ -237,35 +269,47 @@ if __name__ == "__main__":
     argumentList = sys.argv[1:]
 
     # Options
-    options = "e:t:l:"
+    options = "e:t:m:l:"
 
     # Long options
-    long_options = ["Encoder=", "Epochs=", "LearningRate="]
+    long_options = ["Encoder=", "Epochs=", "LearningMode=","LearningRate="]
 
     try:
         # Parsing argument
         arguments, values = getopt.getopt(argumentList, options, long_options)
-        mode = 0
+        encoder = USE_LEVEL_ENCODER
         train_epochs = DEFAULT_TRAINING_EPOCHS
+        lmode = USE_ADD
         lr = DEFAULT_LEARNING_RATE
         # Checking each argument
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
                 if currentValue == str(USE_LEVEL_ENCODER):
-                    mode = USE_LEVEL_ENCODER
+                    encoder = USE_LEVEL_ENCODER
                 elif currentValue == str(USE_RBF_ENCODER):
-                    mode = USE_RBF_ENCODER
+                    encoder = USE_RBF_ENCODER
                 elif currentValue == str(USE_SINUSOID_NGRAM_ENCODER):
-                    mode = USE_SINUSOID_NGRAM_ENCODER
+                    encoder = USE_SINUSOID_NGRAM_ENCODER
                 elif currentValue == str(USE_GENERIC_ENCODER):
-                    mode = USE_GENERIC_ENCODER
+                    encoder = USE_GENERIC_ENCODER
                 else:
-                    mode = USE_LEVEL_ENCODER
+                    encoder = USE_LEVEL_ENCODER
             elif currentArgument in ("-t", "--Epochs"):
                 if currentValue.isnumeric():
                     train_epochs = int(currentValue)
                     if train_epochs < DEFAULT_TRAINING_EPOCHS:
                         train_epochs = DEFAULT_TRAINING_EPOCHS
+            elif currentArgument in ("-m", "--LearningMode"):
+                if currentValue == str(USE_ADD):
+                    lmode = USE_ADD
+                elif currentValue == str(USE_ADAPTHD):
+                    lmode = USE_ADAPTHD
+                elif currentValue == str(USE_ONLINEHD):
+                    lmode = USE_ONLINEHD
+                elif currentValue == str(USE_ADJUSTHD):
+                    lmode = USE_ADJUSTHD
+                else:
+                    lmode = USE_ADD
             elif currentArgument in ("-l", "--LearningRate"):
                 try:
                     lr = float(currentValue)
@@ -276,21 +320,20 @@ if __name__ == "__main__":
                     lr = DEFAULT_LEARNING_RATE
 
         print(
-            "Multi-PID-Tests for %s encoder, with %d train epochs, and lr=%.5f"
-            % (encoder_mode_str(mode), train_epochs, lr)
+            "Multi-PID-Tests for %s encoder and %s learning mode, with %d train epochs, learning mode, and lr=%.5f"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr)
         )
         # Load datasets in windowed format
-        # load_accel_data_full()
-        load_all_pid_data(mode)
+        load_all_pid_data()
 
         with open(
-            "results/hdc_output_combined_%s_%d_%.5f.csv"
-            % (encoder_mode_str(mode), train_epochs, lr),
+            "results/hdc_output_combined_%s_%s_%d_%.5f.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode),train_epochs, lr),
             "w",
             newline="",
         ) as file:
             writer = csv.writer(file)
-            accuracy, f1 = run_train_and_test(mode, train_epochs, lr)
+            accuracy, f1 = run_train_and_test(encoder, lmode, train_epochs, lr)
             writer.writerow([accuracy, f1])
             file.flush()
             file.close()
