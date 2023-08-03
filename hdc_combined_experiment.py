@@ -43,6 +43,7 @@ USE_ADD = 0
 USE_ADAPTHD = 1
 USE_ONLINEHD = 2
 USE_ADJUSTHD = 3
+USE_NEURALHD = 4
 
 
 def encoder_mode_str(mode: int):
@@ -66,6 +67,8 @@ def learning_mode_str(lmode: int):
         return "OnlineHD"
     elif lmode == USE_ADJUSTHD:
         return "AdjustHD"
+    elif lmode == USE_NEURALHD:
+        return "NeuralHD"
     else:
         return "Add"
 
@@ -153,6 +156,10 @@ def run_train(
                             )
                         elif learning_mode == USE_ADJUSTHD:
                             model.add_adjust_iterative(
+                                input_hypervector, label_tensor, lr=lr
+                            )
+                        elif learning_mode == USE_NEURALHD:
+                            model.add_neural(
                                 input_hypervector, label_tensor, lr=lr
                             )
                         writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
@@ -308,6 +315,8 @@ if __name__ == "__main__":
                     lmode = USE_ONLINEHD
                 elif currentValue == str(USE_ADJUSTHD):
                     lmode = USE_ADJUSTHD
+                elif currentValue == str(USE_NEURALHD):
+                    lmode = USE_NEURALHD
                 else:
                     lmode = USE_ADD
             elif currentArgument in ("-l", "--LearningRate"):
