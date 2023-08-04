@@ -22,7 +22,7 @@ import getopt, sys
 
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
-DIMENSIONS = 6000
+DIMENSIONS = 10000
 NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
 DEFAULT_LEARNING_RATE = 0.005
@@ -40,8 +40,8 @@ USE_GENERIC_ENCODER = 3
 
 # Learning mode options
 USE_ADD = 0
-USE_ADAPTHD = 1
-USE_ONLINEHD = 2
+USE_ONLINEHD = 1
+USE_ADAPTHD = 2
 USE_ADJUSTHD = 3
 USE_NEURALHD = 4
 

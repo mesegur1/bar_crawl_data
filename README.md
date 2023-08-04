@@ -23,6 +23,13 @@ ML experiments (using HDC) with the Bar Crawl Dataset from "Bar Crawl: Detecting
 4. HDC Generic encoding
     1. Uses generic encoding paradigm
 
+## HDC Learning Methods Used
+1. Simple Add 
+2. OnlineHD
+3. AdaptHD
+4. AdjustHD
+5. NeuralHD
+
 ## Dependencies
 The following were used with Python 3.10:
 
@@ -39,22 +46,25 @@ The following were used with Python 3.10:
 ## Run Instructions
 1. To run a HDC experiment, run
 ```bash
-python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -t <epochs> -l <learning rate>
+python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4> -t <epochs> -l <learning rate>
 ```
 
 -e : encoder choice (0: level, 1: rbf, 2: sinusoid/ngram, 3: generic)
+
+-m : learning method (0: Simple Add, 1: OnlineHD, 2: AdaptHD, 3: AdjustHD, 4: NeuralHD)
 
 -t : training epochs
 
 -l : learning rate for HDC model
 
 ## Dataset Recreation Instructions
-1. To recreate the PKL dataset files (new sorting), run
+1. To recreate the PKL dataset files (new sorting), place the accelerometer 
+CSV from the dataset into the ```./data/``` folder and run the following script:
 ```
 python ./data_combined_reader.py
 ```
 
-Data will be written to ```./data/```. Options at the top of the script control data settings
+Data will be written to ```./data/``` in PKL format. Options at the top of the script control data settings
 
 ## Data Plotter Instructions
 1. To plot TAC and accelerometer input data for each PID, run
