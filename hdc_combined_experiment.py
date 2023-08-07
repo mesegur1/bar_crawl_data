@@ -5,12 +5,10 @@ import torchhd
 import random
 from torchhd import embeddings
 from torchhd_custom import models  # from torchhd import models
-from encoders import HdcLevelEncoder
-from encoders import HdcRbfEncoder
-from encoders import HdcSinusoidNgramEncoder
-from encoders import HdcGenericEncoder
-from data_combined_reader import load_accel_data_full
-from data_combined_reader import is_greater_than
+from encoders.HdcLevelEncoder import HdcLevelEncoder
+from encoders.HdcRbfEncoder import HdcRbfEncoder
+from encoders.HdcSinusoidNgramEncoder import HdcSinusoidNgramEncoder
+from encoders.HdcGenericEncoder import HdcGenericEncoder
 from data_combined_reader import load_combined_data
 import torchmetrics
 import matplotlib.pyplot as plt
@@ -57,7 +55,8 @@ def encoder_mode_str(mode: int):
         return "generic"
     else:
         return "unknown"
-    
+
+
 def learning_mode_str(lmode: int):
     if lmode == USE_ADD:
         return "Add"
@@ -74,7 +73,7 @@ def learning_mode_str(lmode: int):
 
 
 # Option for RBF encoder
-USE_TANH = True
+USE_BACKPROPAGATION = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -143,25 +142,17 @@ def run_train(
                         label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                         label_tensor = label_tensor.unsqueeze(0)
                         if learning_mode == USE_ADD:
-                            model.add(
-                                input_hypervector, label_tensor, lr=lr
-                            )
+                            model.add(input_hypervector, label_tensor, lr=lr)
                         elif learning_mode == USE_ADAPTHD:
-                            model.add_adapt(
-                                input_hypervector, label_tensor, lr=lr
-                            )
+                            model.add_adapt(input_hypervector, label_tensor, lr=lr)
                         elif learning_mode == USE_ONLINEHD:
-                            model.add_online(
-                                input_hypervector, label_tensor, lr=lr
-                            )
+                            model.add_online(input_hypervector, label_tensor, lr=lr)
                         elif learning_mode == USE_ADJUSTHD:
                             model.add_adjust_iterative(
                                 input_hypervector, label_tensor, lr=lr
                             )
                         elif learning_mode == USE_NEURALHD:
-                            model.add_neural(
-                                input_hypervector, label_tensor, lr=lr
-                            )
+                            model.add_neural(input_hypervector, label_tensor, lr=lr)
                         writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
                         file.flush()
             file.close()
@@ -240,27 +231,29 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
 
 
 # Run a test
-def run_train_and_test(encoder_option: int, learning_mode: int, train_epochs: int, lr: float):
+def run_train_and_test(
+    encoder_option: int, learning_mode: int, train_epochs: int, lr: float
+):
     # Create Centroid model
     model = models.Centroid(
         DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
     )
     # Create Encoder module
     if encoder_option == USE_LEVEL_ENCODER:
-        encode = HdcLevelEncoder.HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
+        encode = HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
     elif encoder_option == USE_RBF_ENCODER:
-        encode = HdcRbfEncoder.HdcRbfEncoder(window, DIMENSIONS, USE_TANH)
+        encode = HdcRbfEncoder(window, DIMENSIONS, USE_BACKPROPAGATION)
     elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
-        encode = HdcSinusoidNgramEncoder.HdcSinusoidNgramEncoder(DIMENSIONS)
+        encode = HdcSinusoidNgramEncoder(DIMENSIONS)
     elif encoder_option == USE_GENERIC_ENCODER:
-        encode = HdcGenericEncoder.HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
+        encode = HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
     run_train(model, encode, learning_mode, train_epochs, lr)
 
-    print("Normalizing model")
-    model.normalize()
+    # print("Normalizing model")
+    # model.normalize()
 
     # Run Testing
     accuracy = run_test(model, encode)
@@ -279,7 +272,7 @@ if __name__ == "__main__":
     options = "e:t:m:l:"
 
     # Long options
-    long_options = ["Encoder=", "Epochs=", "LearningMode=","LearningRate="]
+    long_options = ["Encoder=", "Epochs=", "LearningMode=", "LearningRate="]
 
     try:
         # Parsing argument
@@ -337,7 +330,7 @@ if __name__ == "__main__":
 
         with open(
             "results/hdc_output_combined_%s_%s_%d_%.5f.csv"
-            % (encoder_mode_str(encoder), learning_mode_str(lmode),train_epochs, lr),
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr),
             "w",
             newline="",
         ) as file:

@@ -42,6 +42,7 @@ The following were used with Python 3.10:
 5. Torchmetrics
 6. Tqdm
     1. For progress bars
+7. Librosa
 
 ## Run Instructions
 1. To run a HDC experiment, run

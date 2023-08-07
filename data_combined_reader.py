@@ -1,5 +1,6 @@
 import sys
 import struct
+import warnings
 import numpy as np
 import sklearn
 import pandas as pd
@@ -9,6 +10,7 @@ import pickle
 from tqdm import tqdm
 from scipy import stats
 from python_speech_features import mfcc
+import librosa
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -158,7 +160,6 @@ def load_data(
                     accel_data[base : base + window, 1:],
                     sample_rate,
                     window,
-                    window_step,
                 ),
                 accel_fft_mean(
                     accel_data[base : base + window, 1:],
@@ -177,6 +178,11 @@ def load_data(
                 ),
                 accel_var(
                     accel_data[base : base + window, 1:],
+                ),
+                spectral_centroid(
+                    accel_data[base : base + window, 1:],
+                    sample_rate,
+                    window,
                 ),
             )
         )
@@ -246,25 +252,32 @@ def accel_rms(xyz: np.ndarray):
     return rms.flatten()
 
 
-def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int, win_step: int):
-    window_s = float(win_len / sample_rate)
-    window_step_s = float(win_step / sample_rate)
+def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int):
     x = xyz[:, 0]
     y = xyz[:, 1]
     z = xyz[:, 2]
-    mfcc_feat_x = mfcc(
-        x, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    mfcc_x = librosa.feature.mfcc(
+        y=x, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
     )
-    mfcc_cov_x = mfcc_feat_x @ mfcc_feat_x.T
-    mfcc_feat_y = mfcc(
-        y, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    mfcc_y = librosa.feature.mfcc(
+        y=y, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
     )
-    mfcc_cov_y = mfcc_feat_y @ mfcc_feat_y.T
-    mfcc_feat_z = mfcc(
-        z, samplerate=sample_rate, winlen=window_s, winstep=window_step_s
+    mfcc_z = librosa.feature.mfcc(
+        y=z, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
     )
-    mfcc_cov_z = mfcc_feat_z @ mfcc_feat_z.T
-    mfcc_cov = np.concatenate((mfcc_cov_x, mfcc_cov_y, mfcc_cov_z))
+
+    mfcc_cov_x = mfcc_x.T @ mfcc_x
+    mfcc_cov_y = mfcc_y.T @ mfcc_y
+    mfcc_cov_z = mfcc_z.T @ mfcc_z
+    mfcc_cov_xy = mfcc_x.T @ mfcc_y
+    mfcc_cov_xz = mfcc_x.T @ mfcc_z
+    mfcc_cov_yz = mfcc_y.T @ mfcc_z
+
+    mfcc_cov = np.concatenate(
+        (mfcc_cov_x, mfcc_cov_y, mfcc_cov_z, mfcc_cov_xy, mfcc_cov_xz, mfcc_cov_yz),
+        axis=None,
+    )
     return mfcc_cov.flatten()
 
 
@@ -332,6 +345,17 @@ def accel_var(xyz: np.ndarray):
     z_var = z.var()
 
     return np.array([x_var, y_var, z_var])
+
+
+def spectral_centroid(xyz: np.ndarray, sample_rate: float, win_len: int):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    cent_x = librosa.feature.spectral_centroid(y=x, sr=sample_rate, n_fft=win_len)
+    cent_y = librosa.feature.spectral_centroid(y=y, sr=sample_rate, n_fft=win_len)
+    cent_z = librosa.feature.spectral_centroid(y=z, sr=sample_rate, n_fft=win_len)
+    return np.array([cent_x.item(), cent_y.item(), cent_z.item()])
 
 
 if __name__ == "__main__":
