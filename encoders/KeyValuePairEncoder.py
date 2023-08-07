@@ -4,7 +4,7 @@ import torchhd
 from torchhd_custom import embeddings
 
 
-# HDC Encoder for Bar Crawl Data
+#Key value pair encoder for encoding a feature
 class KeyValuePairEncoder(torch.nn.Module):
     def __init__(self, num_channels: int, levels: int, out_dimension: int):
         super(KeyValuePairEncoder, self).__init__()
