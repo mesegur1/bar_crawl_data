@@ -76,12 +76,11 @@ class HdcLevelEncoder(torch.nn.Module):
         xyz_levels = self.embed(xyz)
         xyz_level = torchhd.multiset(xyz_levels)
         key_weights = self.keys.weight[:input.shape[0]]
-        sample_hvs = torchhd.bind(xyz_level, key_weights)
+        sample_hvs = torchhd.multibind(torchhd.bind(xyz_level, key_weights))
         # Get time hypervectors
-        times = self.timestamps(input[:, 0])
+        times = torchhd.multibind(self.timestamps(input[:, 0]))
         # Bind time sequence for x, y, z samples
-        sample_hvs = sample_hvs * times
-        sample_hv = torchhd.multiset(sample_hvs)
+        sample_hv = torchhd.bind(sample_hvs, times)
         # Encode calculated features
         sample_f1_hv = self.feat_rms_kernel(feat[RMS_START : RMS_START + NUM_RMS])
         sample_f2_hv = self.feat_mfcc_kernel(feat[MFCC_START : MFCC_START + NUM_MFCC])
