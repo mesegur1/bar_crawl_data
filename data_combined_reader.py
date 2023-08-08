@@ -1,18 +1,14 @@
-import sys
-import struct
 import warnings
 import numpy as np
-import sklearn
 import pandas as pd
 import torch
 import random
 import pickle
 from tqdm import tqdm
 from scipy import stats
-from python_speech_features import mfcc
+from collections import OrderedDict
 import librosa
 from sklearn.model_selection import train_test_split
-import csv
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
@@ -153,42 +149,7 @@ def load_data(
         accel_data[base : base + window]
         for base in range(0, len(accel_data), window_step)
     ]
-    data_feat_w = [
-        np.concatenate(
-            (
-                accel_rms(accel_data[base : base + window, 1:]),
-                accel_mfcc_cov(
-                    accel_data[base : base + window, 1:],
-                    sample_rate,
-                    window,
-                ),
-                accel_fft_mean(
-                    accel_data[base : base + window, 1:],
-                ),
-                accel_fft_max(
-                    accel_data[base : base + window, 1:],
-                ),
-                accel_fft_var(
-                    accel_data[base : base + window, 1:],
-                ),
-                accel_mean(
-                    accel_data[base : base + window, 1:],
-                ),
-                accel_max(
-                    accel_data[base : base + window, 1:],
-                ),
-                accel_var(
-                    accel_data[base : base + window, 1:],
-                ),
-                spectral_centroid(
-                    accel_data[base : base + window, 1:],
-                    sample_rate,
-                    window,
-                ),
-            )
-        )
-        for base in range(0, len(accel_data), window_step)
-    ]
+    data_feat_w = feature_extraction(accel_data, sample_rate, window, window_step)
     data_tac_w = [
         stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
         for base in range(0, len(tac_data_labels), window_step)
@@ -248,15 +209,35 @@ def is_greater_than(x: torch.Tensor, eps: float):
     return False
 
 def feature_extraction(accel_data : np.ndarray, sample_rate : float, window : int, window_step : int):
-    df = pd.DataFrame([])
+    window_data = []
     for base in range(0, len(accel_data), window_step):
         xyz = accel_data[base : base + window, 1:]
+        
+        #Create dictionary of features
+        feature_dict = OrderedDict()
         #Root mean square
-        df["rms"] = accel_rms(xyz)
+        feature_dict["rms"] = accel_rms(xyz)
         #MFCC covariance
-        df["mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate, window)
+        feature_dict["mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate, window)
         #FFT mean
-        df["fft_mean"] = accel_fft_mean(xyz)
+        feature_dict["fft_mean"] = accel_fft_mean(xyz)
+        #FFT max
+        feature_dict["fft_max"] = accel_fft_max(xyz)
+        #FFT variance
+        feature_dict["fft_var"] = accel_fft_var(xyz)
+        #Mean
+        feature_dict["mean"] = accel_mean(xyz)
+        #Max
+        feature_dict["max"] = accel_max(xyz)
+        #Variance
+        feature_dict["var"] = accel_var(xyz)
+        #Spectral centroid
+        feature_dict["spectral_centroid"] = spectral_centroid(xyz, sample_rate, window)
+
+        #Flatten dictionary and save
+        features = np.concatenate([feature_dict[column].flatten() for column in feature_dict])
+        window_data.append(features)
+    return window_data
 
 
 def accel_rms(xyz: np.ndarray):
@@ -343,6 +324,25 @@ def accel_mean(xyz: np.ndarray):
 
     return np.array([x_mean, y_mean, z_mean])
 
+def accel_median(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_median = np.median(x)
+    y_median = np.median(y)
+    z_median = np.median(z)
+
+    return np.array([x_median, y_median, z_median])
+
+def accel_std(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_std = x.std()
+    y_std = y.std()
+    z_std = z.std()
+
+    return np.array([x_std, y_std, z_std])
 
 def accel_max(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -354,6 +354,35 @@ def accel_max(xyz: np.ndarray):
 
     return np.array([x_max, y_max, z_max])
 
+def accel_min(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_min = x.min()
+    y_min = y.min()
+    z_min = z.min()
+
+    return np.array([x_min, y_min, z_min])
+
+def accel_abs_max(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_max = np.abs(x).max()
+    y_max = np.abs(y).max()
+    z_max = np.abs(z).max()
+
+    return np.array([x_max, y_max, z_max])
+
+def accel_abs_min(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    x_min = np.abs(x).min()
+    y_min = np.abs(y).min()
+    z_min = np.abs(z).min()
+
+    return np.array([x_min, y_min, z_min])
 
 def accel_var(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -365,6 +394,55 @@ def accel_var(xyz: np.ndarray):
 
     return np.array([x_var, y_var, z_var])
 
+def zero_crossing_rate(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    frame_length = xyz.shape[0]
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    zero_x = librosa.feature.zero_crossing_rate(y=x, frame_length=frame_length, center=False)
+    zero_y = librosa.feature.zero_crossing_rate(y=y, frame_length=frame_length, center=False)
+    zero_z = librosa.feature.zero_crossing_rate(y=z, frame_length=frame_length, center=False)
+    return np.array([zero_x.item(), zero_y.item(), zero_z.item()])
+
+def spectral_entropy_s(x: np.ndarray, n_short_blocks=10):
+    x_ffts = np.abs(np.fft.fft(x))
+    x_ffts = x_ffts[0:int(x.shape[0]/2)]
+    x_ffts = x_ffts / len(x_ffts)
+    signal = x_ffts
+    eps = 0.00000001
+
+    # number of frame samples
+    num_frames = len(signal)
+
+    # total spectral energy
+    total_energy = np.sum(signal ** 2)
+
+    # length of sub-frame
+    sub_win_len = int(np.floor(num_frames / n_short_blocks))
+    if num_frames != sub_win_len * n_short_blocks:
+        signal = signal[0:sub_win_len * n_short_blocks]
+
+    # define sub-frames (using matrix reshape)
+    sub_wins = signal.reshape(sub_win_len, n_short_blocks, order='F').copy()
+
+    # compute spectral sub-energies
+    s = np.sum(sub_wins ** 2, axis=0) / (total_energy + eps)
+
+    # compute spectral entropy
+    entropy = -np.sum(s * np.log2(s + eps))
+
+    return entropy
+
+def spectral_entropy(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    ent_x = spectral_entropy_s(x)
+    ent_y = spectral_entropy_s(y)
+    ent_z = spectral_entropy_s(z)
+
+    return np.array([ent_x, ent_y, ent_z])
 
 def spectral_centroid(xyz: np.ndarray, sample_rate: float, win_len: int):
     x = xyz[:, 0]
@@ -382,16 +460,8 @@ if __name__ == "__main__":
     print("Reading in all data")
     for pid in PIDS:
         # Load data from CSVs
-        end_index = END_INDEX
-        # if pid == "CC6740":
-        #     end_index = 500000
-        # elif pid == "SA0297":
-        #     end_index = 1000000
-        # else:
-        #     end_index = END_INDEX
-        # Load data from CSVs
         load_data(
-            pid, end_index, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
+            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
         )
 
     with open("data/window_size.pkl", "wb") as file:
