@@ -405,11 +405,7 @@ def zero_crossing_rate(xyz: np.ndarray):
     zero_z = librosa.feature.zero_crossing_rate(y=z, frame_length=frame_length, center=False)
     return np.array([zero_x.item(), zero_y.item(), zero_z.item()])
 
-def spectral_entropy_s(x: np.ndarray, n_short_blocks=10):
-    x_ffts = np.abs(np.fft.fft(x))
-    x_ffts = x_ffts[0:int(x.shape[0]/2)]
-    x_ffts = x_ffts / len(x_ffts)
-    signal = x_ffts
+def spectral_entropy_s(signal: np.ndarray, n_short_blocks=10):
     eps = 0.00000001
 
     # number of frame samples
@@ -444,6 +440,23 @@ def spectral_entropy(xyz: np.ndarray):
 
     return np.array([ent_x, ent_y, ent_z])
 
+def spectral_entropy_fft(xyz: np.ndarray):
+    x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
+    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts / len(x_ffts)
+    y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
+    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts / len(y_ffts)
+    z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
+    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts / len(z_ffts)
+
+    ent_x = spectral_entropy_s(x_ffts)
+    ent_y = spectral_entropy_s(y_ffts)
+    ent_z = spectral_entropy_s(z_ffts)
+
+    return np.array([ent_x, ent_y, ent_z])
+
 def spectral_centroid(xyz: np.ndarray, sample_rate: float, win_len: int):
     x = xyz[:, 0]
     y = xyz[:, 1]
@@ -454,6 +467,21 @@ def spectral_centroid(xyz: np.ndarray, sample_rate: float, win_len: int):
     cent_z = librosa.feature.spectral_centroid(y=z, sr=sample_rate, n_fft=win_len)
     return np.array([cent_x.item(), cent_y.item(), cent_z.item()])
 
+def avg_stft_per_frame_s(x: np.ndarray):
+    frame_length = x.shape[0]
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    stft = librosa.amplitude_to_db(np.abs(librosa.stft(x, n_fft=frame_length, hop_length=frame_length, center=False)), ref=np.max)
+    return stft.mean(axis=1)
+
+def avg_stft_per_frame(xyz: np.ndarray):
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    stft_x = avg_stft_per_frame_s(x)
+    stft_y = avg_stft_per_frame_s(y)
+    stft_z = avg_stft_per_frame_s(z)
+    
+    return np.array([stft_x, stft_y, stft_z])
 
 if __name__ == "__main__":
     load_accel_data_full()
