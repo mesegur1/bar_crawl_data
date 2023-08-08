@@ -114,10 +114,6 @@ def load_data(
     tac_data = pd.read_csv("data/clean_tac/%s_clean_TAC.csv" % pid)
     tac_data["timestamp"] = tac_data["timestamp"].astype("datetime64[s]")
     tac_data["TAC_Reading"] = tac_data["TAC_Reading"].astype(float)
-    # Get formatted TAC data
-    tac_data["TAC_Reading"] = (
-        tac_data["TAC_Reading"].map(lambda tac: tac_to_class(tac)).astype("int64")
-    )
     tac_data = tac_data.rename(columns={"timestamp": "time"})
     tac_data = tac_data.set_index("time")
 
@@ -143,9 +139,14 @@ def load_data(
 
     print("Total Data length: %d" % (len(input_data.index)))
 
+    # Get formatted TAC data
+    input_data["TAC_Reading"] = (
+        input_data["TAC_Reading"].map(lambda tac: tac_to_class(tac)).astype("int64")
+    )
+
     # Split data back into two parts for train/test set creation
     accel_data = input_data[["time", "x", "y", "z"]].to_numpy()
-    tac_data_labels = input_data["TAC_Reading"].to_numpy().round().astype("int64")
+    tac_data_labels = input_data["TAC_Reading"].to_numpy()
 
     # Change training data to be windowed
     data_accel_w = [
@@ -246,10 +247,28 @@ def is_greater_than(x: torch.Tensor, eps: float):
         return True
     return False
 
+def feature_extraction(accel_data : np.ndarray, sample_rate : float, window : int, window_step : int):
+    df = pd.DataFrame([])
+    for base in range(0, len(accel_data), window_step):
+        xyz = accel_data[base : base + window, 1:]
+        #Root mean square
+        df["rms"] = accel_rms(xyz)
+        #MFCC covariance
+        df["mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate, window)
+        #FFT mean
+        df["fft_mean"] = accel_fft_mean(xyz)
+
 
 def accel_rms(xyz: np.ndarray):
-    rms = np.sqrt(np.mean(np.square(xyz), axis=0))
-    return rms.flatten()
+    x = xyz[:, 0]
+    y = xyz[:, 1]
+    z = xyz[:, 2]
+    frame_length = xyz.shape[0]
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    rms_x = librosa.feature.rms(y=x, frame_length=frame_length, center=False)
+    rms_y = librosa.feature.rms(y=y, frame_length=frame_length, center=False)
+    rms_z = librosa.feature.rms(y=z, frame_length=frame_length, center=False)
+    return np.array([rms_x.item(), rms_y.item(), rms_z.item()]).flatten()
 
 
 def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int):
