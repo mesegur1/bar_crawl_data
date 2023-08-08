@@ -1,7 +1,36 @@
 import torch
 import numpy as np
 import torchhd
-from torchhd import embeddings
+
+# from torchhd import embeddings
+from torchhd_custom import embeddings
+
+SIGNAL_X_MIN = -5
+SIGNAL_X_MAX = 5
+SIGNAL_Y_MIN = -5
+SIGNAL_Y_MAX = 5
+SIGNAL_Z_MIN = -5
+SIGNAL_Z_MAX = 5
+
+NUM_RMS = 3
+NUM_MFCC = 6
+NUM_FFT_MEAN = 3
+NUM_FFT_MAX = 3
+NUM_FFT_VAR = 3
+NUM_MEAN = 3
+NUM_MAX = 3
+NUM_VAR = 3
+NUM_SPECTRAL_CENTROID = 3
+
+RMS_START = 0
+MFCC_START = RMS_START + NUM_RMS
+FFT_MEAN_START = MFCC_START + NUM_MFCC
+FFT_MAX_START = FFT_MEAN_START + NUM_FFT_MEAN
+FFT_VAR_START = FFT_MAX_START + NUM_FFT_MAX
+MEAN_START = FFT_VAR_START + NUM_FFT_VAR
+MAX_START = MEAN_START + NUM_MEAN
+VAR_START = MAX_START + NUM_MAX
+SP_CNTD_START = VAR_START + NUM_VAR
 
 
 # HDC Encoder for Bar Crawl Data
@@ -9,125 +38,99 @@ class HdcLevelEncoder(torch.nn.Module):
     def __init__(self, levels: int, timestamps: int, out_dimension: int):
         super(HdcLevelEncoder, self).__init__()
 
+        self.signal_level_x = embeddings.Level(
+            levels,
+            out_dimension,
+            dtype=torch.float64,
+            low=SIGNAL_X_MIN,
+            high=SIGNAL_X_MAX,
+        )
+        self.signal_level_y = embeddings.Level(
+            levels,
+            out_dimension,
+            dtype=torch.float64,
+            low=SIGNAL_Y_MIN,
+            high=SIGNAL_Y_MAX,
+        )
+        self.signal_level_z = embeddings.Level(
+            levels,
+            out_dimension,
+            dtype=torch.float64,
+            low=SIGNAL_Z_MIN,
+            high=SIGNAL_Z_MAX,
+        )
         self.timestamps = embeddings.Level(
             timestamps, out_dimension, dtype=torch.float64, low=0, high=timestamps
         )
 
-        # Time domain features
-        self.signal_level_x = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_rms_kernel = embeddings.Sinusoid(
+            NUM_RMS, out_dimension, dtype=torch.float64
         )
-        self.signal_level_y = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_mfcc_kernel = embeddings.Sinusoid(
+            NUM_MFCC, out_dimension, dtype=torch.float64
         )
-        self.signal_level_z = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_fft_mean_kernel = embeddings.Sinusoid(
+            NUM_FFT_MEAN, out_dimension, dtype=torch.float64
         )
-        self.signal_level_mag = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_fft_max_kernel = embeddings.Sinusoid(
+            NUM_FFT_MAX, out_dimension, dtype=torch.float64
         )
-        self.signal_level_energy = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_fft_var_kernel = embeddings.Sinusoid(
+            NUM_FFT_VAR, out_dimension, dtype=torch.float64
         )
-
-        # Frequency domain features
-        self.signal_level_x_fft = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_mean_kernel = embeddings.Sinusoid(
+            NUM_MEAN, out_dimension, dtype=torch.float64
         )
-        self.signal_level_y_fft = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_max_kernel = embeddings.Sinusoid(
+            NUM_MAX, out_dimension, dtype=torch.float64
         )
-        self.signal_level_z_fft = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_var_kernel = embeddings.Sinusoid(
+            NUM_VAR, out_dimension, dtype=torch.float64
         )
-        self.signal_level_mag_fft = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_energy_fft = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_x_fft_i = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_y_fft_i = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_z_fft_i = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_mag_fft_i = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
-        )
-        self.signal_level_energy_fft_i = embeddings.Level(
-            levels, out_dimension, dtype=torch.float64
+        self.feat_spectral_centroid_kernel = embeddings.Sinusoid(
+            NUM_SPECTRAL_CENTROID, out_dimension, dtype=torch.float64
         )
 
-    # Calculate magnitudes of signals
-    def calc_mags(self, xyz: torch.Tensor):
-        sq = torch.square(xyz)
-        # Sum of squares of each component
-        mags = torch.sqrt(torch.sum(sq, dim=1))
-        return mags  # Magnitude signal samples
-
-    # Calculate energy of signals
-    def calc_energy(self, xyz: torch.Tensor):
-        n = xyz.shape[0]
-        sq = torch.square(xyz)
-        energy = torch.sum(sq, dim=1) / max(n, 1)
-        return energy
-
-    # Encode window of feature vectors (x,y,z)
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        # Adjust time
-        input[:, 0] = input[:, 0] - input[0, 0]
+    # Encode window of raw vectors (x,y,z) and feature vectors (f,)
+    def forward(self, input: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         # Get level hypervectors for x, y, z samples
-        x_signal = input[:, 1]
-        y_signal = input[:, 2]
-        z_signal = input[:, 3]
+        x_signal = torch.clamp(input[:, 1], min=SIGNAL_X_MIN, max=SIGNAL_X_MAX)
+        y_signal = torch.clamp(input[:, 2], min=SIGNAL_Y_MIN, max=SIGNAL_Y_MAX)
+        z_signal = torch.clamp(input[:, 3], min=SIGNAL_Z_MIN, max=SIGNAL_Z_MAX)
         x_levels = self.signal_level_x(x_signal)
         y_levels = self.signal_level_y(y_signal)
         z_levels = self.signal_level_z(z_signal)
-        mag_levels = self.signal_level_mag(self.calc_mags(input[:, 1:]))
-        energy_levels = self.signal_level_energy(self.calc_energy(input[:, 1:]))
-        # Get level hypervectors for FFT x, y, z samples
-        fft_signals = torch.fft.fft(input[:, 1:], dim=0)
-        x_fft_signal = fft_signals[:, 0].real
-        y_fft_signal = fft_signals[:, 1].real
-        z_fft_signal = fft_signals[:, 2].real
-        x_fft_i_signal = fft_signals[:, 0].imag
-        y_fft_i_signal = fft_signals[:, 1].imag
-        z_fft_i_signal = fft_signals[:, 2].imag
-        x_fft_levels = self.signal_level_x_fft(x_fft_signal)
-        y_fft_levels = self.signal_level_y_fft(y_fft_signal)
-        z_fft_levels = self.signal_level_z_fft(z_fft_signal)
-        x_fft_i_levels = self.signal_level_x_fft_i(x_fft_i_signal)
-        y_fft_i_levels = self.signal_level_y_fft_i(y_fft_i_signal)
-        z_fft_i_levels = self.signal_level_z_fft_i(z_fft_i_signal)
-        fft_mag_levels = self.signal_level_mag_fft(self.calc_mags(fft_signals.real))
-        fft_mag_i_levels = self.signal_level_mag_fft_i(self.calc_mags(fft_signals.imag))
-        energy_fft_levels = self.signal_level_energy_fft(
-            self.calc_energy(fft_signals.real)
-        )
-        energy_fft_i_levels = self.signal_level_energy_fft_i(
-            self.calc_energy(fft_signals.imag)
-        )
         # Get time hypervectors
         times = self.timestamps(input[:, 0])
         # Bind time sequence for x, y, z samples
-        sample_hvs = (
-            (x_levels * y_levels * z_levels + mag_levels + energy_levels)
-            + (
-                x_fft_levels
-                * y_fft_levels
-                * z_fft_levels
-                * x_fft_i_levels
-                * y_fft_i_levels
-                * z_fft_i_levels
-                + fft_mag_levels * fft_mag_i_levels
-                + energy_fft_levels * energy_fft_i_levels
-            )
-        ) * times
-        sample_hv = torchhd.multiset(sample_hvs)
+        sample_hvs = (x_levels + y_levels + z_levels) * times
+        sample_hv = torchhd.multibind(sample_hvs)
+        # Encode calculated features
+        sample_f1_hv = self.feat_rms_kernel(feat[RMS_START : RMS_START + NUM_RMS])
+        sample_f2_hv = self.feat_mfcc_kernel(feat[MFCC_START : MFCC_START + NUM_MFCC])
+        sample_f3_hv = self.feat_fft_mean_kernel(
+            feat[FFT_MEAN_START : FFT_MEAN_START + NUM_FFT_MEAN]
+        )
+        sample_f4_hv = self.feat_fft_max_kernel(
+            feat[FFT_MAX_START : FFT_MAX_START + NUM_FFT_MAX]
+        )
+        sample_f5_hv = self.feat_fft_var_kernel(
+            feat[FFT_VAR_START : FFT_VAR_START + NUM_FFT_VAR]
+        )
+        sample_f6_hv = self.feat_mean_kernel(feat[MEAN_START : MEAN_START + NUM_MEAN])
+        sample_f7_hv = self.feat_max_kernel(feat[MAX_START : MAX_START + NUM_MAX])
+        sample_f8_hv = self.feat_var_kernel(feat[VAR_START : VAR_START + NUM_VAR])
+        sample_f9_hv = self.feat_spectral_centroid_kernel(
+            feat[SP_CNTD_START : SP_CNTD_START + NUM_SPECTRAL_CENTROID]
+        )
+
+        sample_hv = (
+            sample_hv
+            * sample_f1_hv  # Misc features
+            * (sample_f2_hv + sample_f9_hv)  # Spectral features
+            * (sample_f3_hv + sample_f4_hv + sample_f5_hv)  # Frequency domain features
+            * (sample_f6_hv + sample_f7_hv + sample_f8_hv)  # Time domain features
+        )
         # Apply activation function
-        sample_hv = torch.tanh(sample_hv)
-        return sample_hv
+        sample_hv = torchhd.hard_quantize(sample_hv)  # torch.sin(sample_hv)
+        return sample_hv.flatten()
