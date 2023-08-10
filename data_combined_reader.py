@@ -7,6 +7,7 @@ import pickle
 from tqdm import tqdm
 from scipy import stats
 from scipy.signal import welch
+from scipy.signal import find_peaks
 from collections import OrderedDict
 import librosa
 from sklearn.model_selection import train_test_split
@@ -526,7 +527,7 @@ def spectral_spread(xyz: np.ndarray, sample_rate: float):
 
     return np.array([spread_x, spread_y, spread_z])
 
-def spectral_flux_s(fft_magnitude, previous_fft_magnitude):
+def spectral_flux_s(fft_magnitude: np.ndarray, previous_fft_magnitude: np.ndarray):
     eps = 0.00000001
     # compute the spectral flux as the sum of square distances:
     fft_sum = np.sum(fft_magnitude + eps)
@@ -591,6 +592,31 @@ def spectral_rolloff(xyz: np.ndarray):
     ro_z = spectral_rolloff_s(z_ffts)
 
     return np.array([ro_x, ro_y, ro_z])
+
+def spectral_peak_ratio_s(fft_magnitude: np.ndarray):
+    peaks, _ = find_peaks(fft_magnitude, height=0)
+    if peaks.size() > 2:
+        ratio = peaks[-1] / peaks[-2]
+    else:
+        ratio = 1.0
+    return ratio
+
+def spectral_peak_ratio(xyz: np.ndarray):
+    x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
+    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts / len(x_ffts)
+    y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
+    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts / len(y_ffts)
+    z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
+    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts / len(z_ffts)
+
+    r_x = spectral_peak_ratio_s(x_ffts)
+    r_y = spectral_peak_ratio_s(y_ffts)
+    r_z = spectral_peak_ratio_s(z_ffts)
+
+    return np.array([r_x, r_y, r_z])
 
 def skewness(xyz: np.ndarray):
     skew = stats.skew(xyz, axis=0)
