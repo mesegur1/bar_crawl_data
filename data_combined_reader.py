@@ -10,6 +10,7 @@ from scipy.signal import welch
 from scipy.signal import find_peaks
 from collections import OrderedDict
 import librosa
+import skdh
 from sklearn.model_selection import train_test_split
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
@@ -210,34 +211,39 @@ def is_greater_than(x: torch.Tensor, eps: float):
         return True
     return False
 
-def feature_extraction(accel_data : np.ndarray, sample_rate : float, window : int, window_step : int):
+
+def feature_extraction(
+    accel_data: np.ndarray, sample_rate: float, window: int, window_step: int
+):
     window_data = []
     for base in range(0, len(accel_data), window_step):
         xyz = accel_data[base : base + window, 1:]
-        
-        #Create dictionary of features
+
+        # Create dictionary of features
         feature_dict = OrderedDict()
-        #Root mean square
+        # Root mean square
         feature_dict["rms"] = accel_rms(xyz)
-        #MFCC covariance
+        # MFCC covariance
         feature_dict["mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate)
-        #FFT mean
+        # FFT mean
         feature_dict["fft_mean"] = accel_fft_mean(xyz)
-        #FFT max
+        # FFT max
         feature_dict["fft_max"] = accel_fft_max(xyz)
-        #FFT variance
+        # FFT variance
         feature_dict["fft_var"] = accel_fft_var(xyz)
-        #Mean
+        # Mean
         feature_dict["mean"] = accel_mean(xyz)
-        #Max
+        # Max
         feature_dict["max"] = accel_max(xyz)
-        #Variance
+        # Variance
         feature_dict["var"] = accel_var(xyz)
-        #Spectral centroid
+        # Spectral centroid
         feature_dict["spectral_centroid"] = spectral_centroid(xyz, sample_rate)
 
-        #Flatten dictionary and save
-        features = np.concatenate([feature_dict[column].flatten() for column in feature_dict])
+        # Flatten dictionary and save
+        features = np.concatenate(
+            [feature_dict[column].flatten() for column in feature_dict]
+        )
         window_data.append(features)
     return window_data
 
@@ -261,13 +267,28 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
     frame_length = xyz.shape[0]
     warnings.filterwarnings("ignore")  # There is a harmless padding warning
     mfcc_x = librosa.feature.mfcc(
-        y=x, sr=sample_rate, n_mfcc=13, n_fft=frame_length, lifter=22, window=frame_length
+        y=x,
+        sr=sample_rate,
+        n_mfcc=13,
+        n_fft=frame_length,
+        lifter=22,
+        window=frame_length,
     )
     mfcc_y = librosa.feature.mfcc(
-        y=y, sr=sample_rate, n_mfcc=13, n_fft=frame_length, lifter=22, window=frame_length
+        y=y,
+        sr=sample_rate,
+        n_mfcc=13,
+        n_fft=frame_length,
+        lifter=22,
+        window=frame_length,
     )
     mfcc_z = librosa.feature.mfcc(
-        y=z, sr=sample_rate, n_mfcc=13, n_fft=frame_length, lifter=22, window=frame_length
+        y=z,
+        sr=sample_rate,
+        n_mfcc=13,
+        n_fft=frame_length,
+        lifter=22,
+        window=frame_length,
     )
 
     mfcc_cov_x = mfcc_x.T @ mfcc_x
@@ -286,13 +307,13 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
 
 def accel_fft_mean(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     x_fft_mean = x_ffts.mean()
@@ -304,13 +325,13 @@ def accel_fft_mean(xyz: np.ndarray):
 
 def accel_fft_max(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     x_fft_max = x_ffts.max()
@@ -322,13 +343,13 @@ def accel_fft_max(xyz: np.ndarray):
 
 def accel_fft_var(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     x_fft_var = x_ffts.var()
@@ -348,6 +369,7 @@ def accel_mean(xyz: np.ndarray):
 
     return np.array([x_mean, y_mean, z_mean])
 
+
 def accel_median(xyz: np.ndarray):
     x = xyz[:, 0]
     y = xyz[:, 1]
@@ -357,6 +379,7 @@ def accel_median(xyz: np.ndarray):
     z_median = np.median(z)
 
     return np.array([x_median, y_median, z_median])
+
 
 def accel_std(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -368,6 +391,7 @@ def accel_std(xyz: np.ndarray):
 
     return np.array([x_std, y_std, z_std])
 
+
 def accel_max(xyz: np.ndarray):
     x = xyz[:, 0]
     y = xyz[:, 1]
@@ -377,6 +401,7 @@ def accel_max(xyz: np.ndarray):
     z_max = z.max()
 
     return np.array([x_max, y_max, z_max])
+
 
 def accel_min(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -388,6 +413,7 @@ def accel_min(xyz: np.ndarray):
 
     return np.array([x_min, y_min, z_min])
 
+
 def accel_abs_max(xyz: np.ndarray):
     x = xyz[:, 0]
     y = xyz[:, 1]
@@ -397,6 +423,7 @@ def accel_abs_max(xyz: np.ndarray):
     z_max = np.abs(z).max()
 
     return np.array([x_max, y_max, z_max])
+
 
 def accel_abs_min(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -408,6 +435,7 @@ def accel_abs_min(xyz: np.ndarray):
 
     return np.array([x_min, y_min, z_min])
 
+
 def accel_var(xyz: np.ndarray):
     x = xyz[:, 0]
     y = xyz[:, 1]
@@ -418,16 +446,24 @@ def accel_var(xyz: np.ndarray):
 
     return np.array([x_var, y_var, z_var])
 
+
 def zero_crossing_rate(xyz: np.ndarray):
     x = xyz[:, 0]
     y = xyz[:, 1]
     z = xyz[:, 2]
     frame_length = xyz.shape[0]
     warnings.filterwarnings("ignore")  # There is a harmless padding warning
-    zero_x = librosa.feature.zero_crossing_rate(y=x, frame_length=frame_length, center=False)
-    zero_y = librosa.feature.zero_crossing_rate(y=y, frame_length=frame_length, center=False)
-    zero_z = librosa.feature.zero_crossing_rate(y=z, frame_length=frame_length, center=False)
+    zero_x = librosa.feature.zero_crossing_rate(
+        y=x, frame_length=frame_length, center=False
+    )
+    zero_y = librosa.feature.zero_crossing_rate(
+        y=y, frame_length=frame_length, center=False
+    )
+    zero_z = librosa.feature.zero_crossing_rate(
+        y=z, frame_length=frame_length, center=False
+    )
     return np.array([zero_x.item(), zero_y.item(), zero_z.item()])
+
 
 def spectral_entropy_s(signal: np.ndarray, n_short_blocks=10):
     eps = 0.00000001
@@ -436,23 +472,24 @@ def spectral_entropy_s(signal: np.ndarray, n_short_blocks=10):
     num_frames = len(signal)
 
     # total spectral energy
-    total_energy = np.sum(signal ** 2)
+    total_energy = np.sum(signal**2)
 
     # length of sub-frame
     sub_win_len = int(np.floor(num_frames / n_short_blocks))
     if num_frames != sub_win_len * n_short_blocks:
-        signal = signal[0:sub_win_len * n_short_blocks]
+        signal = signal[0 : sub_win_len * n_short_blocks]
 
     # define sub-frames (using matrix reshape)
-    sub_wins = signal.reshape(sub_win_len, n_short_blocks, order='F').copy()
+    sub_wins = signal.reshape(sub_win_len, n_short_blocks, order="F").copy()
 
     # compute spectral sub-energies
-    s = np.sum(sub_wins ** 2, axis=0) / (total_energy + eps)
+    s = np.sum(sub_wins**2, axis=0) / (total_energy + eps)
 
     # compute spectral entropy
     entropy = -np.sum(s * np.log2(s + eps))
 
     return entropy
+
 
 def spectral_entropy(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -464,15 +501,16 @@ def spectral_entropy(xyz: np.ndarray):
 
     return np.array([ent_x, ent_y, ent_z])
 
+
 def spectral_entropy_fft(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     ent_x = spectral_entropy_s(x_ffts)
@@ -480,6 +518,7 @@ def spectral_entropy_fft(xyz: np.ndarray):
     ent_z = spectral_entropy_s(z_ffts)
 
     return np.array([ent_x, ent_y, ent_z])
+
 
 def spectral_centroid(xyz: np.ndarray, sample_rate: float):
     x = xyz[:, 0]
@@ -495,7 +534,9 @@ def spectral_centroid(xyz: np.ndarray, sample_rate: float):
 
 def spectral_spread_s(fft_magnitude: np.ndarray, sampling_rate: float):
     eps = 0.00000001
-    ind = (np.arange(1, len(fft_magnitude) + 1)) * (sampling_rate / (2.0 * len(fft_magnitude)))
+    ind = (np.arange(1, len(fft_magnitude) + 1)) * (
+        sampling_rate / (2.0 * len(fft_magnitude))
+    )
 
     Xt = fft_magnitude.copy()
     Xt = Xt / Xt.max()
@@ -510,15 +551,16 @@ def spectral_spread_s(fft_magnitude: np.ndarray, sampling_rate: float):
 
     return spread
 
+
 def spectral_spread(xyz: np.ndarray, sample_rate: float):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     spread_x = spectral_spread_s(x_ffts, sample_rate)
@@ -527,34 +569,38 @@ def spectral_spread(xyz: np.ndarray, sample_rate: float):
 
     return np.array([spread_x, spread_y, spread_z])
 
+
 def spectral_flux_s(fft_magnitude: np.ndarray, previous_fft_magnitude: np.ndarray):
     eps = 0.00000001
     # compute the spectral flux as the sum of square distances:
     fft_sum = np.sum(fft_magnitude + eps)
     previous_fft_sum = np.sum(previous_fft_magnitude + eps)
-    sp_flux = np.sum((fft_magnitude / fft_sum - previous_fft_magnitude / previous_fft_sum) ** 2)
+    sp_flux = np.sum(
+        (fft_magnitude / fft_sum - previous_fft_magnitude / previous_fft_sum) ** 2
+    )
 
     return sp_flux
 
+
 def spectral_flux(xyz: np.ndarray, prev_xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     prev_x_ffts = np.abs(np.fft.fft(prev_xyz[:, 0]))
-    prev_x_ffts = prev_x_ffts[0:int(prev_xyz.shape[0]/2)]
+    prev_x_ffts = prev_x_ffts[0 : int(prev_xyz.shape[0] / 2)]
     prev_x_ffts = prev_x_ffts / len(prev_x_ffts)
     prev_y_ffts = np.abs(np.fft.fft(prev_xyz[:, 1]))
-    prev_y_ffts = prev_y_ffts[0:int(prev_xyz.shape[0]/2)]
+    prev_y_ffts = prev_y_ffts[0 : int(prev_xyz.shape[0] / 2)]
     prev_y_ffts = prev_y_ffts / len(prev_y_ffts)
     prev_z_ffts = np.abs(np.fft.fft(prev_xyz[:, 2]))
-    prev_z_ffts = prev_z_ffts[0:int(prev_xyz.shape[0]/2)]
+    prev_z_ffts = prev_z_ffts[0 : int(prev_xyz.shape[0] / 2)]
     prev_z_ffts = prev_z_ffts / len(prev_z_ffts)
 
     flux_x = spectral_flux_s(x_ffts, prev_x_ffts)
@@ -563,28 +609,31 @@ def spectral_flux(xyz: np.ndarray, prev_xyz: np.ndarray):
 
     return np.array([flux_x, flux_y, flux_z])
 
+
 def spectral_rolloff_s(signal: np.ndarray, c=0.90):
     eps = 0.00000001
-    energy = np.sum(signal ** 2)
+    energy = np.sum(signal**2)
     fft_length = len(signal)
     threshold = c * energy
     # Find the spectral rolloff as the frequency position where the respective spectral energy is equal to c*totalEnergy
-    cumulative_sum = np.cumsum(signal ** 2) + eps
+    cumulative_sum = np.cumsum(signal**2) + eps
     a = np.nonzero(cumulative_sum > threshold)[0]
     sp_rolloff = 0.0
-    if len(a) > 0: sp_rolloff = np.float64(a[0]) / (float(fft_length))
+    if len(a) > 0:
+        sp_rolloff = np.float64(a[0]) / (float(fft_length))
 
     return sp_rolloff
 
+
 def spectral_rolloff(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     ro_x = spectral_rolloff_s(x_ffts)
@@ -592,6 +641,7 @@ def spectral_rolloff(xyz: np.ndarray):
     ro_z = spectral_rolloff_s(z_ffts)
 
     return np.array([ro_x, ro_y, ro_z])
+
 
 def spectral_peak_ratio_s(fft_magnitude: np.ndarray):
     peaks, _ = find_peaks(fft_magnitude, height=0)
@@ -601,15 +651,16 @@ def spectral_peak_ratio_s(fft_magnitude: np.ndarray):
         ratio = 1.0
     return ratio
 
+
 def spectral_peak_ratio(xyz: np.ndarray):
     x_ffts = np.abs(np.fft.fft(xyz[:, 0]))
-    x_ffts = x_ffts[0:int(xyz.shape[0]/2)]
+    x_ffts = x_ffts[0 : int(xyz.shape[0] / 2)]
     x_ffts = x_ffts / len(x_ffts)
     y_ffts = np.abs(np.fft.fft(xyz[:, 1]))
-    y_ffts = y_ffts[0:int(xyz.shape[0]/2)]
+    y_ffts = y_ffts[0 : int(xyz.shape[0] / 2)]
     y_ffts = y_ffts / len(y_ffts)
     z_ffts = np.abs(np.fft.fft(xyz[:, 2]))
-    z_ffts = z_ffts[0:int(xyz.shape[0]/2)]
+    z_ffts = z_ffts[0 : int(xyz.shape[0] / 2)]
     z_ffts = z_ffts / len(z_ffts)
 
     r_x = spectral_peak_ratio_s(x_ffts)
@@ -618,23 +669,33 @@ def spectral_peak_ratio(xyz: np.ndarray):
 
     return np.array([r_x, r_y, r_z])
 
+
 def skewness(xyz: np.ndarray):
     skew = stats.skew(xyz, axis=0)
     return skew.flatten()
+
 
 def kurtosis(xyz: np.ndarray):
     k = stats.kurtosis(xyz, axis=0)
     return k.flatten()
 
+
 def avg_power(xyz: np.ndarray, sample_rate: float):
     _, power = welch(xyz, sample_rate, axis=sample_rate)
     return np.mean(power, axis=0).flatten()
 
+
 def avg_stft_per_frame_s(x: np.ndarray):
     frame_length = x.shape[0]
     warnings.filterwarnings("ignore")  # There is a harmless padding warning
-    stft = librosa.amplitude_to_db(np.abs(librosa.stft(x, n_fft=frame_length, hop_length=frame_length, center=False)), ref=np.max)
+    stft = librosa.amplitude_to_db(
+        np.abs(
+            librosa.stft(x, n_fft=frame_length, hop_length=frame_length, center=False)
+        ),
+        ref=np.max,
+    )
     return stft.mean(axis=1)
+
 
 def avg_stft_per_frame(xyz: np.ndarray):
     x = xyz[:, 0]
@@ -643,8 +704,46 @@ def avg_stft_per_frame(xyz: np.ndarray):
     stft_x = avg_stft_per_frame_s(x)
     stft_y = avg_stft_per_frame_s(y)
     stft_z = avg_stft_per_frame_s(z)
-    
+
     return np.array([stft_x, stft_y, stft_z])
+
+
+def cadence(txyz: np.ndarray, sampling_rate: float):
+    gait = skdh.gait.Gait()
+    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
+    skdh.gait.Cadence().predict(sampling_rate, gait=gait_results)
+    cadence = gait_results["Cadence"]
+
+    return cadence
+
+
+def step_time(txyz: np.ndarray, sampling_rate: float):
+    gait = skdh.gait.Gait()
+    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
+    step_time = gait_results["StepTime"]
+
+    return step_time
+
+
+def num_of_steps(txyz: np.ndarray, sampling_rate: float):
+    gait = skdh.gait.Gait()
+    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
+    steps = (txyz[-1:0] - txyz[0, 0]) / gait_results["StepTime"]
+
+    return steps
+
+
+def gait_stretch(txyz: np.ndarray, sampling_rate: float):
+    gait = skdh.gait.Gait()
+    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    skdh.gait.StepLength().predict(sampling_rate, gait=gait_results)
+    stretch = gait_results["StepLength"]
+
+    return stretch
+
 
 if __name__ == "__main__":
     load_accel_data_full()
