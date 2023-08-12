@@ -10,7 +10,7 @@ from scipy.signal import welch
 from scipy.signal import find_peaks
 from collections import OrderedDict
 import librosa
-import skdh
+from skdh import gait
 from sklearn.model_selection import train_test_split
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
@@ -216,29 +216,47 @@ def feature_extraction(
     accel_data: np.ndarray, sample_rate: float, window: int, window_step: int
 ):
     window_data = []
+    prev_xyz = accel_data[0:window, 1:]
     for base in range(0, len(accel_data), window_step):
         xyz = accel_data[base : base + window, 1:]
+        txyz = accel_data[base : base + window]
 
         # Create dictionary of features
         feature_dict = OrderedDict()
-        # Root mean square
-        feature_dict["rms"] = accel_rms(xyz)
-        # MFCC covariance
-        feature_dict["mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate)
-        # FFT mean
-        feature_dict["fft_mean"] = accel_fft_mean(xyz)
-        # FFT max
-        feature_dict["fft_max"] = accel_fft_max(xyz)
-        # FFT variance
-        feature_dict["fft_var"] = accel_fft_var(xyz)
-        # Mean
-        feature_dict["mean"] = accel_mean(xyz)
-        # Max
-        feature_dict["max"] = accel_max(xyz)
-        # Variance
-        feature_dict["var"] = accel_var(xyz)
-        # Spectral centroid
+        # Original features
+        feature_dict["accel_rms"] = accel_rms(xyz)
+        feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate)
+        feature_dict["accel_mean"] = accel_mean(xyz)
+        feature_dict["accel_median"] = accel_median(xyz)
+        feature_dict["accel_std"] = accel_std(xyz)
+        feature_dict["accel_abs_max"] = accel_abs_max(xyz)
+        feature_dict["accel_abs_min"] = accel_abs_min(xyz)
+        feature_dict["accel_fft_max"] = accel_fft_max(xyz)
+        feature_dict["zero_crossing_rate"] = zero_crossing_rate(xyz)
+        feature_dict["spectral_entropy"] = spectral_entropy(xyz)
+        feature_dict["spectral_entropy_fft"] = spectral_entropy_fft(xyz)
         feature_dict["spectral_centroid"] = spectral_centroid(xyz, sample_rate)
+        feature_dict["spectral_spread"] = spectral_spread(xyz, sample_rate)
+        feature_dict["spectral_flux"] = spectral_flux(xyz, prev_xyz)
+        feature_dict["spectral_rolloff"] = spectral_rolloff(xyz)
+        feature_dict["spectral_peak_ratio"] = spectral_peak_ratio(xyz)
+        feature_dict["skewness"] = skewness(xyz)
+        feature_dict["kurtosis"] = kurtosis(xyz)
+        feature_dict["avg_power"] = avg_power(xyz, sample_rate)
+        feature_dict["cadence"] = cadence(txyz, sample_rate)
+        feature_dict["step_time"] = step_time(txyz, sample_rate)
+        feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
+        feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
+        # Extra features
+        # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
+        # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
+        # feature_dict["accel_fft_var"] = accel_fft_var(xyz)
+        # feature_dict["accel_min"] = accel_min(xyz)
+        # feature_dict["accel_var"] = accel_var(xyz)
+        # feature_dict["accel_max"] = accel_max(xyz)
+
+        # Update previous window variable
+        prev_xyz = accel_data[base : base + window, 1:]
 
         # Flatten dictionary and save
         features = np.concatenate(
@@ -709,37 +727,37 @@ def avg_stft_per_frame(xyz: np.ndarray):
 
 
 def cadence(txyz: np.ndarray, sampling_rate: float):
-    gait = skdh.gait.Gait()
+    gait = gait.Gait()
     gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
-    skdh.gait.Cadence().predict(sampling_rate, gait=gait_results)
+    gait.StepTime().predict(sampling_rate, gait=gait_results)
+    gait.Cadence().predict(sampling_rate, gait=gait_results)
     cadence = gait_results["Cadence"]
 
     return cadence
 
 
 def step_time(txyz: np.ndarray, sampling_rate: float):
-    gait = skdh.gait.Gait()
+    gait = gait.Gait()
     gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
+    gait.StepTime().predict(sampling_rate, gait=gait_results)
     step_time = gait_results["StepTime"]
 
     return step_time
 
 
 def num_of_steps(txyz: np.ndarray, sampling_rate: float):
-    gait = skdh.gait.Gait()
+    gait = gait.Gait()
     gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    skdh.gait.StepTime().predict(sampling_rate, gait=gait_results)
+    gait.StepTime().predict(sampling_rate, gait=gait_results)
     steps = (txyz[-1:0] - txyz[0, 0]) / gait_results["StepTime"]
 
     return steps
 
 
 def gait_stretch(txyz: np.ndarray, sampling_rate: float):
-    gait = skdh.gait.Gait()
+    gait = gait.Gait()
     gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    skdh.gait.StepLength().predict(sampling_rate, gait=gait_results)
+    gait.StepLength().predict(sampling_rate, gait=gait_results)
     stretch = gait_results["StepLength"]
 
     return stretch
