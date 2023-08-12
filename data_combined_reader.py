@@ -9,7 +9,6 @@ import random
 import pickle
 from tqdm import tqdm
 from scipy import stats
-from python_speech_features import mfcc
 import librosa
 from sklearn.model_selection import train_test_split
 import csv

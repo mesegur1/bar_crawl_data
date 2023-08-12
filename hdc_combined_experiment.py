@@ -25,6 +25,10 @@ NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
 DEFAULT_LEARNING_RATE = 0.005
 DEFAULT_TRAINING_EPOCHS = 1
+DISTHD_ALPHA = 1
+DISTHD_BETA = 1
+DISTHD_THETA = 1
+DISTHD_R = 0.8
 
 # Data windowing settings (this is actually read from PKL data files,
 # but we provide a default here)
@@ -42,6 +46,7 @@ USE_ONLINEHD = 1
 USE_ADAPTHD = 2
 USE_ADJUSTHD = 3
 USE_NEURALHD = 4
+USE_DISTHD = 5
 
 
 def encoder_mode_str(mode: int):
@@ -68,6 +73,8 @@ def learning_mode_str(lmode: int):
         return "AdjustHD"
     elif lmode == USE_NEURALHD:
         return "NeuralHD"
+    elif lmode == USE_DISTHD:
+        return "DistHD"
     else:
         return "Add"
 
@@ -153,8 +160,13 @@ def run_train(
                             )
                         elif learning_mode == USE_NEURALHD:
                             model.add_neural(input_hypervector, label_tensor, lr=lr)
+                        elif learning_mode == USE_DISTHD:
+                            model.add_dist(input_hypervector, label_tensor, lr=lr)
+                            model.eval_dist(input_hypervector, label_tensor, device, alpha=DISTHD_ALPHA, beta=DISTHD_BETA, theta=DISTHD_THETA)
                         writer.writerow((x[-1][0], x[-1][1], x[-1][2], x[-1][3], y))
                         file.flush()
+                    if learning_mode == USE_DISTHD:
+                        model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
             file.close()
     else:
         with torch.no_grad():
@@ -234,10 +246,15 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
 def run_train_and_test(
     encoder_option: int, learning_mode: int, train_epochs: int, lr: float
 ):
-    # Create Centroid model
-    model = models.Centroid(
-        DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
-    )
+    # Create Centroid 
+    if learning_mode == USE_DISTHD:
+        model = models.Centroid(
+            DIMENSIONS, NUM_TAC_LEVELS, method="dist_iterative", dtype=torch.float64, device=device
+        )
+    else:
+        model = models.Centroid(
+            DIMENSIONS, NUM_TAC_LEVELS, dtype=torch.float64, device=device
+        )
     # Create Encoder module
     if encoder_option == USE_LEVEL_ENCODER:
         encode = HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
@@ -263,6 +280,7 @@ def run_train_and_test(
 
 if __name__ == "__main__":
     print("Using {} device".format(device))
+    torch.set_default_tensor_type(torch.DoubleTensor)
 
     # Remove 1st argument from the
     # list of command line arguments
@@ -310,6 +328,8 @@ if __name__ == "__main__":
                     lmode = USE_ADJUSTHD
                 elif currentValue == str(USE_NEURALHD):
                     lmode = USE_NEURALHD
+                elif currentValue == str(USE_DISTHD):
+                    lmode = USE_DISTHD
                 else:
                     lmode = USE_ADD
             elif currentArgument in ("-l", "--LearningRate"):
