@@ -10,7 +10,7 @@ from scipy.signal import welch
 from scipy.signal import find_peaks
 from collections import OrderedDict
 import librosa
-from skdh import gait
+import skdh
 from sklearn.model_selection import train_test_split
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
@@ -663,7 +663,7 @@ def spectral_rolloff(xyz: np.ndarray):
 
 def spectral_peak_ratio_s(fft_magnitude: np.ndarray):
     peaks, _ = find_peaks(fft_magnitude, height=0)
-    if peaks.size() > 2:
+    if peaks.size >= 2:
         ratio = peaks[-1] / peaks[-2]
     else:
         ratio = 1.0
@@ -699,7 +699,7 @@ def kurtosis(xyz: np.ndarray):
 
 
 def avg_power(xyz: np.ndarray, sample_rate: float):
-    _, power = welch(xyz, sample_rate, axis=sample_rate)
+    _, power = welch(xyz, sample_rate, axis=0)
     return np.mean(power, axis=0).flatten()
 
 
@@ -727,38 +727,36 @@ def avg_stft_per_frame(xyz: np.ndarray):
 
 
 def cadence(txyz: np.ndarray, sampling_rate: float):
-    gait = gait.Gait()
-    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    gait.StepTime().predict(sampling_rate, gait=gait_results)
-    gait.Cadence().predict(sampling_rate, gait=gait_results)
-    cadence = gait_results["Cadence"]
+    gait_obj = skdh.gait.Gait()
+    gait_obj.add_endpoints(skdh.gait.Cadence)
+    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    print(gait)
+    input()
+    cadence = gait["Cadence"]
 
     return cadence
 
 
 def step_time(txyz: np.ndarray, sampling_rate: float):
-    gait = gait.Gait()
-    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    gait.StepTime().predict(sampling_rate, gait=gait_results)
-    step_time = gait_results["StepTime"]
+    gait_obj = skdh.gait.Gait()
+    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    step_time = gait["StepTime"]
 
     return step_time
 
 
 def num_of_steps(txyz: np.ndarray, sampling_rate: float):
-    gait = gait.Gait()
-    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    gait.StepTime().predict(sampling_rate, gait=gait_results)
-    steps = (txyz[-1:0] - txyz[0, 0]) / gait_results["StepTime"]
+    gait_obj = skdh.gait.Gait()
+    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    steps = (txyz[-1:0] - txyz[0, 0]) / gait["StepTime"]
 
     return steps
 
 
 def gait_stretch(txyz: np.ndarray, sampling_rate: float):
-    gait = gait.Gait()
-    gait_results = gait.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    gait.StepLength().predict(sampling_rate, gait=gait_results)
-    stretch = gait_results["StepLength"]
+    gait_obj = skdh.gait.Gait()
+    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
+    stretch = gait["StepLength"]
 
     return stretch
 
