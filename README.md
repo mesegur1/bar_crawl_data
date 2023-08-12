@@ -29,6 +29,7 @@ ML experiments (using HDC) with the Bar Crawl Dataset from "Bar Crawl: Detecting
 3. AdaptHD
 4. AdjustHD
 5. NeuralHD
+6. DistHD
 
 ## Dependencies
 The following were used with Python 3.10:
@@ -47,12 +48,12 @@ The following were used with Python 3.10:
 ## Run Instructions
 1. To run a HDC experiment, run
 ```bash
-python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4> -t <epochs> -l <learning rate>
+python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4, 5> -t <epochs> -l <learning rate>
 ```
 
 -e : encoder choice (0: level, 1: rbf, 2: sinusoid/ngram, 3: generic)
 
--m : learning method (0: Simple Add, 1: OnlineHD, 2: AdaptHD, 3: AdjustHD, 4: NeuralHD)
+-m : learning method (0: Simple Add, 1: OnlineHD, 2: AdaptHD, 3: AdjustHD, 4: NeuralHD, 5: DistHD)
 
 -t : training epochs
 
