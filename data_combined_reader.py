@@ -11,6 +11,7 @@ from scipy.signal import find_peaks
 from collections import OrderedDict
 import librosa
 import skdh
+import os, sys
 from sklearn.model_selection import train_test_split
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
@@ -44,6 +45,15 @@ PIDS = [
     "SA0297",
     "SF3079",
 ]
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
 
 
 # Convert TAC measurement to a class
@@ -243,10 +253,10 @@ def feature_extraction(
         feature_dict["skewness"] = skewness(xyz)
         feature_dict["kurtosis"] = kurtosis(xyz)
         feature_dict["avg_power"] = avg_power(xyz, sample_rate)
-        feature_dict["cadence"] = cadence(txyz, sample_rate)
-        feature_dict["step_time"] = step_time(txyz, sample_rate)
-        feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
-        feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
+        # feature_dict["cadence"] = cadence(txyz, sample_rate)
+        # feature_dict["step_time"] = step_time(txyz, sample_rate)
+        # feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
+        # feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
         # Extra features
         # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
         # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
@@ -260,7 +270,7 @@ def feature_extraction(
 
         # Flatten dictionary and save
         features = np.concatenate(
-            [feature_dict[column].flatten() for column in feature_dict]
+            [np.array(feature_dict[column]).flatten() for column in feature_dict]
         )
         window_data.append(features)
     return window_data
@@ -727,36 +737,61 @@ def avg_stft_per_frame(xyz: np.ndarray):
 
 
 def cadence(txyz: np.ndarray, sampling_rate: float):
-    gait_obj = skdh.gait.Gait()
-    gait_obj.add_endpoints(skdh.gait.Cadence)
-    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    print(gait)
-    input()
-    cadence = gait["Cadence"]
+    with HiddenPrints():
+        gait_obj = skdh.gait.Gait()
+        gait_obj.add_endpoints(skdh.gait.Cadence)
+        time_sec = txyz[:, 0] / 1000.0
+        warnings.filterwarnings("ignore")
+        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
+        if "PARAM:cadence" in gait:
+            cadence = max(np.mean(gait["PARAM:cadence"]), 1)
+        else:
+            cadence = 0
 
     return cadence
 
 
 def step_time(txyz: np.ndarray, sampling_rate: float):
-    gait_obj = skdh.gait.Gait()
-    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    step_time = gait["StepTime"]
+    with HiddenPrints():
+        gait_obj = skdh.gait.Gait()
+        gait_obj.add_endpoints(skdh.gait.StepTime)
+        time_sec = txyz[:, 0] / 1000.0
+        warnings.filterwarnings("ignore") 
+        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
+        if "PARAM:step time" in gait:
+            step_time = max(np.mean(gait["PARAM:step time"]), 1)
+        else:
+            step_time = 0
 
     return step_time
 
 
 def num_of_steps(txyz: np.ndarray, sampling_rate: float):
-    gait_obj = skdh.gait.Gait()
-    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    steps = (txyz[-1:0] - txyz[0, 0]) / gait["StepTime"]
+    with HiddenPrints():
+        gait_obj = skdh.gait.Gait()
+        gait_obj.add_endpoints(skdh.gait.StepTime)
+        time_sec = txyz[:, 0] / 1000.0
+        warnings.filterwarnings("ignore")
+        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
+        if "PARAM:step time" in gait:
+            steps = (txyz[-1:0] - txyz[0, 0]) / max(np.mean(gait["PARAM:step time"]), 1)
+        else:
+            steps = 0
 
     return steps
 
 
 def gait_stretch(txyz: np.ndarray, sampling_rate: float):
-    gait_obj = skdh.gait.Gait()
-    gait = gait_obj.predict(txyz[:, 0], txyz[:, 1:], fs=sampling_rate)
-    stretch = gait["StepLength"]
+    with HiddenPrints():
+        gait_obj = skdh.gait.Gait()
+        gait_obj.add_endpoints(skdh.gait.StepLength)
+        time_sec = txyz[:, 0] / 1000.0
+        warnings.filterwarnings("ignore")
+        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
+        if "PARAM:step length" in gait:
+            stretch = max(np.mean(gait["PARAM:step length"]), 1)
+        else:
+            stretch = 0
 
     return stretch
 
