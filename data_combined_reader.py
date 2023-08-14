@@ -59,36 +59,7 @@ def tac_to_class(tac: float):
         return TAC_LEVEL_1
 
 
-accel_data_full = pd.DataFrame([])  # = []
-
-# sample_rate = 400
-# def extract_segments_with_resample(pid):
-#     # filter accelerometer readings for the pid
-#     acc_pid = accel_data_full[accel_data_full.pid == pid]
-#     # get TAC readings for the pid
-#     tacs_pid = all_tacs[all_tacs.pid == pid]
-#     # interpolation function for TAC readings of pid
-#     expected_tac = interp1d(tacs_pid.timestamp, tacs_pid.TAC_Reading, kind='linear')
-#     # get the start and end time for the TAC readings in seconds
-#     start, end = tacs_pid.timestamp.min(), tacs_pid.timestamp.max()
-#     # extract accelerator readings in the time frame TAC has been active
-#     acc_pid = acc_pid[(start <= acc_pid.timestamp) & (acc_pid.timestamp <= end)]
-#     acc_pid = acc_pid.sort_values(by=['time'])
-#     # 10 seconds grouping window
-#     acc_pid['ten_seconds_group'] = acc_pid.timestamp//10
-#     # select groups with 40 Hz sampling rate
-#     samples_in_groups = acc_pid.ten_seconds_group.value_counts()
-#     valid_groups = samples_in_groups[(samples_in_groups != 400) & (samples_in_groups > 375) & (samples_in_groups < 425)].index
-#     valid_groups_acc_pid = acc_pid[acc_pid['ten_seconds_group'].isin(valid_groups)]
-#     grouped = valid_groups_acc_pid.groupby('ten_seconds_group').agg(lambda s: s.to_list())
-#     grouped = grouped[['x', 'y', 'z', 'timestamp']]
-#     grouped['x'] = grouped['x'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
-#     grouped['y'] = grouped['y'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
-#     grouped['z'] = grouped['z'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
-#     grouped['timestamp'] = grouped.timestamp.map(lambda x: x[0])
-#     grouped['tac'] = grouped.timestamp.map(lambda x: expected_tac(x))
-#     grouped['pid'] = pid
-#     return grouped
+accel_data_full = pd.DataFrame([])
 
 # Load in accelerometer data into memory
 def load_accel_data_full():
@@ -159,15 +130,13 @@ def load_data(
     accel_data_specific = accel_data_specific.query("@start <= time and time <= @end")
     accel_data_specific = accel_data_specific.sort_values(by=["time"])
 
-    # # Down sample accelerometer data
-    # print("resample argument = %dms" % (MS_PER_SEC / sample_rate))
-    # accel_data = accel_data_specific.resample("%dms" % (MS_PER_SEC / sample_rate)).last()
+    # Down sample accelerometer data
+    accel_data = accel_data_specific.resample("%dms" % (MS_PER_SEC / sample_rate)).last()
+    accel_data = accel_data.interpolate(method="linear")
 
     # Combine data frames
     input_data = accel_data_specific
     input_data["TAC_Reading"] = input_data["time"].map(lambda t : expected_tac(t))
-
-    #input_data = input_data.resample("%dms" % (MS_PER_SEC / sample_rate)).first()
 
     if limit > len(input_data.index):
         limit = len(input_data.index)
