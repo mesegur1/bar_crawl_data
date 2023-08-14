@@ -10,8 +10,10 @@ import pickle
 from tqdm import tqdm
 from scipy import stats
 import librosa
+from scipy.interpolate import interp1d
 from sklearn.model_selection import train_test_split
 import csv
+import glob
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
@@ -59,18 +61,48 @@ def tac_to_class(tac: float):
 
 accel_data_full = pd.DataFrame([])  # = []
 
+# sample_rate = 400
+# def extract_segments_with_resample(pid):
+#     # filter accelerometer readings for the pid
+#     acc_pid = accel_data_full[accel_data_full.pid == pid]
+#     # get TAC readings for the pid
+#     tacs_pid = all_tacs[all_tacs.pid == pid]
+#     # interpolation function for TAC readings of pid
+#     expected_tac = interp1d(tacs_pid.timestamp, tacs_pid.TAC_Reading, kind='linear')
+#     # get the start and end time for the TAC readings in seconds
+#     start, end = tacs_pid.timestamp.min(), tacs_pid.timestamp.max()
+#     # extract accelerator readings in the time frame TAC has been active
+#     acc_pid = acc_pid[(start <= acc_pid.timestamp) & (acc_pid.timestamp <= end)]
+#     acc_pid = acc_pid.sort_values(by=['time'])
+#     # 10 seconds grouping window
+#     acc_pid['ten_seconds_group'] = acc_pid.timestamp//10
+#     # select groups with 40 Hz sampling rate
+#     samples_in_groups = acc_pid.ten_seconds_group.value_counts()
+#     valid_groups = samples_in_groups[(samples_in_groups != 400) & (samples_in_groups > 375) & (samples_in_groups < 425)].index
+#     valid_groups_acc_pid = acc_pid[acc_pid['ten_seconds_group'].isin(valid_groups)]
+#     grouped = valid_groups_acc_pid.groupby('ten_seconds_group').agg(lambda s: s.to_list())
+#     grouped = grouped[['x', 'y', 'z', 'timestamp']]
+#     grouped['x'] = grouped['x'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
+#     grouped['y'] = grouped['y'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
+#     grouped['z'] = grouped['z'].apply(lambda x: librosa.resample(np.array(x), len(x), sample_rate))
+#     grouped['timestamp'] = grouped.timestamp.map(lambda x: x[0])
+#     grouped['tac'] = grouped.timestamp.map(lambda x: expected_tac(x))
+#     grouped['pid'] = pid
+#     return grouped
 
 # Load in accelerometer data into memory
 def load_accel_data_full():
     global accel_data_full
     print("Read in accelerometer data")
     accel_data_full = pd.read_csv("data/all_accelerometer_data_pids_13.csv")
-    accel_data_full["time"] = accel_data_full["time"].astype("datetime64[ms]")
+    accel_data_full["time"] = accel_data_full["time"].astype("int64")
     accel_data_full["pid"] = accel_data_full["pid"].astype(str)
     accel_data_full["x"] = accel_data_full["x"].astype(float)
     accel_data_full["y"] = accel_data_full["y"].astype(float)
     accel_data_full["z"] = accel_data_full["z"].astype(float)
-    accel_data_full = accel_data_full.set_index("time")
+    accel_data_full.sort_values(by=['time'])
+    accel_data_full["time_index"] = accel_data_full["time"].astype("datetime64[ms]")
+    accel_data_full = accel_data_full.set_index("time_index")
 
 
 def load_combined_data(pids: list):
@@ -111,30 +143,31 @@ def load_data(
     global accel_data_full
     print("Reading in Data for person %s" % (pid))
     tac_data = pd.read_csv("data/clean_tac/%s_clean_TAC.csv" % pid)
-    tac_data["timestamp"] = tac_data["timestamp"].astype("datetime64[s]")
+    tac_data["timestamp"] = tac_data["timestamp"].astype("int64").map(lambda t : t * 1000)
     tac_data["TAC_Reading"] = tac_data["TAC_Reading"].astype(float)
-    # Get formatted TAC data
-    tac_data["TAC_Reading"] = (
-        tac_data["TAC_Reading"].map(lambda tac: tac_to_class(tac)).astype("int64")
-    )
     tac_data = tac_data.rename(columns={"timestamp": "time"})
-    tac_data = tac_data.set_index("time")
+    tac_data.sort_values(by=["time"])
+
+    # Interpolation function for TAC readings of pid
+    expected_tac = interp1d(tac_data["time"], tac_data["TAC_Reading"], kind='linear')
 
     # Get specific accelerometer data
     accel_data_specific = accel_data_full.query("pid == @pid")
-    if pid == "JB3156" or pid == "CC6740":
-        # skip first row (dummy data)
-        accel_data_specific = accel_data_specific.iloc[1:-1]
 
-    # Down sample accelerometer data
-    accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
+    start, end = tac_data["time"].min(), tac_data["time"].max()
+    # Extract accelerator readings in the time frame TAC has been active
+    accel_data_specific = accel_data_specific.query("@start <= time and time <= @end")
+    accel_data_specific = accel_data_specific.sort_values(by=["time"])
 
-    # Combine Data Frames to perform interpolation and backfilling
-    input_data = accel_data.join(tac_data, how="outer")
-    input_data = input_data.apply(pd.Series.interpolate, args=("time",))
-    input_data = input_data.fillna(method="backfill")
-    input_data["time"] = input_data.index
-    input_data["time"] = input_data["time"].astype("int64")
+    # # Down sample accelerometer data
+    # print("resample argument = %dms" % (MS_PER_SEC / sample_rate))
+    # accel_data = accel_data_specific.resample("%dms" % (MS_PER_SEC / sample_rate)).last()
+
+    # Combine data frames
+    input_data = accel_data_specific
+    input_data["TAC_Reading"] = input_data["time"].map(lambda t : expected_tac(t))
+
+    #input_data = input_data.resample("%dms" % (MS_PER_SEC / sample_rate)).first()
 
     if limit > len(input_data.index):
         limit = len(input_data.index)
@@ -142,9 +175,14 @@ def load_data(
 
     print("Total Data length: %d" % (len(input_data.index)))
 
+    # Get formatted TAC data
+    input_data["TAC_Reading"] = (
+        input_data["TAC_Reading"].map(lambda tac: tac_to_class(tac)).astype("int64")
+    )
+
     # Split data back into two parts for train/test set creation
     accel_data = input_data[["time", "x", "y", "z"]].to_numpy()
-    tac_data_labels = input_data["TAC_Reading"].to_numpy().round().astype("int64")
+    tac_data_labels = input_data["TAC_Reading"].to_numpy()
 
     # Change training data to be windowed
     data_accel_w = [
@@ -257,13 +295,13 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float, win_len: int):
     z = xyz[:, 2]
     warnings.filterwarnings("ignore")  # There is a harmless padding warning
     mfcc_x = librosa.feature.mfcc(
-        y=x, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
+        y=x, sr=sample_rate, n_mfcc=13, n_fft=win_len, window=win_len
     )
     mfcc_y = librosa.feature.mfcc(
-        y=y, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
+        y=y, sr=sample_rate, n_mfcc=13, n_fft=win_len, window=win_len
     )
     mfcc_z = librosa.feature.mfcc(
-        y=z, sr=sample_rate, n_mfcc=13, n_fft=win_len, lifter=22, window=win_len
+        y=z, sr=sample_rate, n_mfcc=13, n_fft=win_len, window=win_len
     )
 
     mfcc_cov_x = mfcc_x.T @ mfcc_x
