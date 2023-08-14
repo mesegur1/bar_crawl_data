@@ -128,6 +128,7 @@ def load_data(
 
     # Down sample accelerometer data
     accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
+    accel_data = accel_data.interpolate(method="linear")
 
     # Combine Data Frames to perform interpolation and backfilling
     input_data = accel_data.join(tac_data, how="outer")
