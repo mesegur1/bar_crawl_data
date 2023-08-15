@@ -70,6 +70,7 @@ def load_accel_data_full():
     accel_data_full["x"] = accel_data_full["x"].astype(float)
     accel_data_full["y"] = accel_data_full["y"].astype(float)
     accel_data_full["z"] = accel_data_full["z"].astype(float)
+    accel_data_full = accel_data_full.sort_values(by="time")
     accel_data_full = accel_data_full.set_index("time")
 
 
@@ -118,6 +119,7 @@ def load_data(
         tac_data["TAC_Reading"].map(lambda tac: tac_to_class(tac)).astype("int64")
     )
     tac_data = tac_data.rename(columns={"timestamp": "time"})
+    tac_data = tac_data.sort_values(by="time")
     tac_data = tac_data.set_index("time")
 
     # Get specific accelerometer data
@@ -126,14 +128,23 @@ def load_data(
         # skip first row (dummy data)
         accel_data_specific = accel_data_specific.iloc[1:-1]
 
+    start = tac_data.index.min()
+    stop = tac_data.index.max()
+    accel_data = accel_data_specific.query("@start <= index & @stop >= index")
+
     # Down sample accelerometer data
-    accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
-    accel_data = accel_data.interpolate(method="linear")
+    # accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
+    # accel_data = accel_data.interpolate(method="linear")
 
     # Combine Data Frames to perform interpolation and backfilling
     input_data = accel_data.join(tac_data, how="outer")
     input_data = input_data.apply(pd.Series.interpolate, args=("time",))
     input_data = input_data.fillna(method="backfill")
+
+    # Down sample data again
+    input_data = input_data.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
+    input_data = input_data.interpolate(method="linear")
+
     input_data["time"] = input_data.index
     input_data["time"] = input_data["time"].astype("int64")
 
