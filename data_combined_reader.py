@@ -265,10 +265,10 @@ def feature_extraction(
         feature_dict["skewness"] = skewness(xyz)
         feature_dict["kurtosis"] = kurtosis(xyz)
         feature_dict["avg_power"] = avg_power(xyz, sample_rate)
-        # feature_dict["cadence"] = cadence(txyz, sample_rate)
-        # feature_dict["step_time"] = step_time(txyz, sample_rate)
-        # feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
-        # feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
+        feature_dict["cadence"] = cadence(txyz, sample_rate)
+        feature_dict["step_time"] = step_time(txyz, sample_rate)
+        feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
+        feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
         # Extra features
         # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
         # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
@@ -612,6 +612,10 @@ def spectral_spread(xyz: np.ndarray, sample_rate: float):
 
 def spectral_flux_s(fft_magnitude: np.ndarray, previous_fft_magnitude: np.ndarray):
     eps = 0.00000001
+    #Truncate if necessary
+    length = min(len(fft_magnitude), len(previous_fft_magnitude))
+    fft_magnitude = fft_magnitude[0:length]
+    previous_fft_magnitude = previous_fft_magnitude[0:length]
     # compute the spectral flux as the sum of square distances:
     fft_sum = np.sum(fft_magnitude + eps)
     previous_fft_sum = np.sum(previous_fft_magnitude + eps)
@@ -749,61 +753,57 @@ def avg_stft_per_frame(xyz: np.ndarray):
 
 
 def cadence(txyz: np.ndarray, sampling_rate: float):
-    with HiddenPrints():
-        gait_obj = skdh.gait.Gait()
-        gait_obj.add_endpoints(skdh.gait.Cadence)
-        time_sec = txyz[:, 0] / 1000.0
-        warnings.filterwarnings("ignore")
-        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
-        if "PARAM:cadence" in gait:
-            cadence = max(np.mean(gait["PARAM:cadence"]), 1)
-        else:
-            cadence = 0
+    warnings.filterwarnings("ignore")
+    gait_obj = skdh.gait.Gait()
+    gait_obj.add_endpoints(skdh.gait.Cadence)
+    time_sec = txyz[:, 0].astype(float) / 1000.0
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    if "PARAM:cadence" in gait:
+        cadence = max(np.mean(gait["PARAM:cadence"]), 1)
+    else:
+        cadence = 0
 
     return cadence
 
 
 def step_time(txyz: np.ndarray, sampling_rate: float):
-    with HiddenPrints():
-        gait_obj = skdh.gait.Gait()
-        gait_obj.add_endpoints(skdh.gait.StepTime)
-        time_sec = txyz[:, 0] / 1000.0
-        warnings.filterwarnings("ignore") 
-        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
-        if "PARAM:step time" in gait:
-            step_time = max(np.mean(gait["PARAM:step time"]), 1)
-        else:
-            step_time = 0
+    warnings.filterwarnings("ignore")
+    gait_obj = skdh.gait.Gait()
+    gait_obj.add_endpoints(skdh.gait.StepTime)
+    time_sec = txyz[:, 0].astype(float) / 1000.0
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    if "PARAM:step time" in gait:
+        step_time = max(np.mean(gait["PARAM:step time"]), 1)
+    else:
+        step_time = 0
 
     return step_time
 
 
 def num_of_steps(txyz: np.ndarray, sampling_rate: float):
-    with HiddenPrints():
-        gait_obj = skdh.gait.Gait()
-        gait_obj.add_endpoints(skdh.gait.StepTime)
-        time_sec = txyz[:, 0] / 1000.0
-        warnings.filterwarnings("ignore")
-        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
-        if "PARAM:step time" in gait:
-            steps = (txyz[-1:0] - txyz[0, 0]) / max(np.mean(gait["PARAM:step time"]), 1)
-        else:
-            steps = 0
+    warnings.filterwarnings("ignore")
+    gait_obj = skdh.gait.Gait()
+    gait_obj.add_endpoints(skdh.gait.StepTime)
+    time_sec = txyz[:, 0].astype(float) / 1000.0
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    if "PARAM:step time" in gait:
+        steps = (txyz[-1:0] - txyz[0, 0]) / max(np.mean(gait["PARAM:step time"]), 1)
+    else:
+        steps = 0
 
     return steps
 
 
 def gait_stretch(txyz: np.ndarray, sampling_rate: float):
-    with HiddenPrints():
-        gait_obj = skdh.gait.Gait()
-        gait_obj.add_endpoints(skdh.gait.StepLength)
-        time_sec = txyz[:, 0] / 1000.0
-        warnings.filterwarnings("ignore")
-        gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
-        if "PARAM:step length" in gait:
-            stretch = max(np.mean(gait["PARAM:step length"]), 1)
-        else:
-            stretch = 0
+    warnings.filterwarnings("ignore")
+    gait_obj = skdh.gait.Gait()
+    gait_obj.add_endpoints(skdh.gait.StepLength)
+    time_sec = txyz[:, 0].astype(float) / 1000.0
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    if "PARAM:step length" in gait:
+        stretch = max(np.mean(gait["PARAM:step length"]), 1)
+    else:
+        stretch = 0
 
     return stretch
 
