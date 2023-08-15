@@ -25,10 +25,10 @@ NUM_SIGNAL_LEVELS = 200
 NUM_TAC_LEVELS = 2
 DEFAULT_LEARNING_RATE = 0.005
 DEFAULT_TRAINING_EPOCHS = 1
-DISTHD_ALPHA = 1
-DISTHD_BETA = 1
+DISTHD_ALPHA = 4
+DISTHD_BETA = 2
 DISTHD_THETA = 1
-DISTHD_R = 0.8
+DISTHD_R = 0.05
 
 # Data windowing settings (this is actually read from PKL data files,
 # but we provide a default here)
@@ -269,8 +269,8 @@ def run_train_and_test(
     # Run training
     run_train(model, encode, learning_mode, train_epochs, lr)
 
-    # print("Normalizing model")
-    # model.normalize()
+    print("Normalizing model")
+    model.normalize()
 
     # Run Testing
     accuracy = run_test(model, encode)
