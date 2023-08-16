@@ -139,8 +139,8 @@ def load_data(
     accel_data = accel_data_specific.query("@start <= index & @stop >= index")
 
     # Down sample accelerometer data
-    # accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
-    # accel_data = accel_data.interpolate(method="linear")
+    accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
+    accel_data = accel_data.interpolate(method="linear")
 
     # Combine Data Frames to perform interpolation and backfilling
     input_data = accel_data.join(tac_data, how="outer")
@@ -170,31 +170,24 @@ def load_data(
     tac_data_labels = input_data["TAC_Reading"].to_numpy()
 
     # Change training data to be windowed
-    data_accel_w = [
-        accel_data[base : base + window]
-        for base in range(0, len(accel_data), window_step)
-    ]
-    data_feat_w = feature_extraction(accel_data, sample_rate, window, window_step)
-    data_tac_w = [
-        stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
-        for base in range(0, len(tac_data_labels), window_step)
-    ]
+    data_accel_w = []
+    data_feat_w = []
+    data_tac_w = []
+    prev_accel_w = accel_data[0:window, :]
+    print("Generating windowed data")
+    for base in tqdm(range(0, len(accel_data), window_step)):
+        accel_w = accel_data[base : base + window]
+        # Check for zeroed windows
+        if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] > 2:
+            #Compute TAC and extracted features
+            tac_w = stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
+            feat_w = feature_extraction(accel_w, prev_accel_w, sample_rate)
 
-    # Removing zeroed windows
-    print("Removing zeroed accel data windows")
-    zero_windows_i = []
-    for i in range(0, len(data_accel_w)):
-        if is_greater_than(data_accel_w[i], MOTION_EPSILON) == False:
-            zero_windows_i.append(i)
-    data_accel_w = [
-        w for w in data_accel_w if w not in [data_accel_w[i] for i in zero_windows_i]
-    ]
-    data_feat_w = [
-        w for w in data_feat_w if w not in [data_feat_w[i] for i in zero_windows_i]
-    ]
-    data_tac_w = [
-        w for w in data_tac_w if w not in [data_tac_w[i] for i in zero_windows_i]
-    ]
+            data_accel_w.append(accel_w)
+            data_tac_w.append(tac_w)
+            data_feat_w.append(feat_w)
+
+        prev_accel_w = accel_w
 
     print("Creating data sets")
     # Split data into two parts
@@ -235,57 +228,51 @@ def is_greater_than(x: torch.Tensor, eps: float):
 
 
 def feature_extraction(
-    accel_data: np.ndarray, sample_rate: float, window: int, window_step: int
+    accel_data: np.ndarray, prev_accel: np.ndarray, sample_rate: float,
 ):
-    window_data = []
-    prev_xyz = accel_data[0:window, 1:]
-    for base in range(0, len(accel_data), window_step):
-        xyz = accel_data[base : base + window, 1:]
-        txyz = accel_data[base : base + window]
+    xyz = accel_data[:, 1:]
+    txyz = accel_data
+    prev_xyz = prev_accel[:, 1:]
 
-        # Create dictionary of features
-        feature_dict = OrderedDict()
-        # Original features
-        feature_dict["accel_rms"] = accel_rms(xyz)
-        feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate)
-        feature_dict["accel_mean"] = accel_mean(xyz)
-        feature_dict["accel_median"] = accel_median(xyz)
-        feature_dict["accel_std"] = accel_std(xyz)
-        feature_dict["accel_abs_max"] = accel_abs_max(xyz)
-        feature_dict["accel_abs_min"] = accel_abs_min(xyz)
-        feature_dict["accel_fft_max"] = accel_fft_max(xyz)
-        feature_dict["zero_crossing_rate"] = zero_crossing_rate(xyz)
-        feature_dict["spectral_entropy"] = spectral_entropy(xyz)
-        feature_dict["spectral_entropy_fft"] = spectral_entropy_fft(xyz)
-        feature_dict["spectral_centroid"] = spectral_centroid(xyz, sample_rate)
-        feature_dict["spectral_spread"] = spectral_spread(xyz, sample_rate)
-        feature_dict["spectral_flux"] = spectral_flux(xyz, prev_xyz)
-        feature_dict["spectral_rolloff"] = spectral_rolloff(xyz)
-        feature_dict["spectral_peak_ratio"] = spectral_peak_ratio(xyz)
-        feature_dict["skewness"] = skewness(xyz)
-        feature_dict["kurtosis"] = kurtosis(xyz)
-        feature_dict["avg_power"] = avg_power(xyz, sample_rate)
-        feature_dict["cadence"] = cadence(txyz, sample_rate)
-        feature_dict["step_time"] = step_time(txyz, sample_rate)
-        feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate)
-        feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate)
-        # Extra features
-        # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
-        # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
-        # feature_dict["accel_fft_var"] = accel_fft_var(xyz)
-        # feature_dict["accel_min"] = accel_min(xyz)
-        # feature_dict["accel_var"] = accel_var(xyz)
-        # feature_dict["accel_max"] = accel_max(xyz)
+    # Create dictionary of features
+    feature_dict = OrderedDict()
+    # Original features
+    feature_dict["accel_rms"] = accel_rms(xyz) #3
+    feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate) #6
+    feature_dict["accel_mean"] = accel_mean(xyz) #3
+    feature_dict["accel_median"] = accel_median(xyz) #3
+    feature_dict["accel_std"] = accel_std(xyz) #3
+    feature_dict["accel_abs_max"] = accel_abs_max(xyz) #3
+    feature_dict["accel_abs_min"] = accel_abs_min(xyz) #3
+    feature_dict["accel_fft_max"] = accel_fft_max(xyz) #3
+    feature_dict["zero_crossing_rate"] = zero_crossing_rate(xyz) #3
+    feature_dict["spectral_entropy"] = spectral_entropy(xyz) #3
+    feature_dict["spectral_entropy_fft"] = spectral_entropy_fft(xyz) #3
+    feature_dict["spectral_centroid"] = spectral_centroid(xyz, sample_rate) #3
+    feature_dict["spectral_spread"] = spectral_spread(xyz, sample_rate) #3
+    feature_dict["spectral_flux"] = spectral_flux(xyz, prev_xyz) #3
+    feature_dict["spectral_rolloff"] = spectral_rolloff(xyz) #3
+    feature_dict["spectral_peak_ratio"] = spectral_peak_ratio(xyz) #3
+    feature_dict["skewness"] = skewness(xyz) #3
+    feature_dict["kurtosis"] = kurtosis(xyz) #3
+    feature_dict["avg_power"] = avg_power(xyz, sample_rate) #3
+    feature_dict["cadence"] = cadence(txyz, sample_rate) #1
+    feature_dict["step_time"] = step_time(txyz, sample_rate) #1
+    feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate) #1
+    feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate) #1
+    # Extra features
+    # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
+    # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
+    # feature_dict["accel_fft_var"] = accel_fft_var(xyz)
+    # feature_dict["accel_min"] = accel_min(xyz)
+    # feature_dict["accel_var"] = accel_var(xyz)
+    # feature_dict["accel_max"] = accel_max(xyz)
 
-        # Update previous window variable
-        prev_xyz = accel_data[base : base + window, 1:]
-
-        # Flatten dictionary and save
-        features = np.concatenate(
-            [np.array(feature_dict[column]).flatten() for column in feature_dict]
-        )
-        window_data.append(features)
-    return window_data
+    # Flatten dictionary and save
+    features = np.concatenate(
+        [np.array(feature_dict[column]).flatten() for column in feature_dict],
+    )
+    return features
 
 
 def accel_rms(xyz: np.ndarray):
@@ -757,9 +744,9 @@ def cadence(txyz: np.ndarray, sampling_rate: float):
     gait_obj = skdh.gait.Gait()
     gait_obj.add_endpoints(skdh.gait.Cadence)
     time_sec = txyz[:, 0].astype(float) / 1000.0
-    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
     if "PARAM:cadence" in gait:
-        cadence = max(np.mean(gait["PARAM:cadence"]), 1)
+        cadence = np.nanmax((np.mean(gait["PARAM:cadence"]), 1))
     else:
         cadence = 0
 
@@ -771,9 +758,9 @@ def step_time(txyz: np.ndarray, sampling_rate: float):
     gait_obj = skdh.gait.Gait()
     gait_obj.add_endpoints(skdh.gait.StepTime)
     time_sec = txyz[:, 0].astype(float) / 1000.0
-    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
     if "PARAM:step time" in gait:
-        step_time = max(np.mean(gait["PARAM:step time"]), 1)
+        step_time = np.nanmax((np.mean(gait["PARAM:step time"]), 1))
     else:
         step_time = 0
 
@@ -785,9 +772,9 @@ def num_of_steps(txyz: np.ndarray, sampling_rate: float):
     gait_obj = skdh.gait.Gait()
     gait_obj.add_endpoints(skdh.gait.StepTime)
     time_sec = txyz[:, 0].astype(float) / 1000.0
-    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
     if "PARAM:step time" in gait:
-        steps = (txyz[-1:0] - txyz[0, 0]) / max(np.mean(gait["PARAM:step time"]), 1)
+        steps = (txyz[-1, 0] - txyz[0, 0]) / np.nanmax((np.mean(gait["PARAM:step time"]), 1))
     else:
         steps = 0
 
@@ -799,9 +786,9 @@ def gait_stretch(txyz: np.ndarray, sampling_rate: float):
     gait_obj = skdh.gait.Gait()
     gait_obj.add_endpoints(skdh.gait.StepLength)
     time_sec = txyz[:, 0].astype(float) / 1000.0
-    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], height=1.6)
+    gait = gait_obj.predict(time=time_sec, accel=txyz[:, 1:], fs=sampling_rate, height=1.6)
     if "PARAM:step length" in gait:
-        stretch = max(np.mean(gait["PARAM:step length"]), 1)
+        stretch = np.nanmax((np.mean(gait["PARAM:step length"]), 1))
     else:
         stretch = 0
 
