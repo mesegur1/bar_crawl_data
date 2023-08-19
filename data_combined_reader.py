@@ -237,8 +237,8 @@ def feature_extraction(
     # Create dictionary of features
     feature_dict = OrderedDict()
     # Original features
-    feature_dict["accel_rms"] = accel_rms(xyz) #3
     feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate) #6
+    feature_dict["accel_rms"] = accel_rms(xyz) #3
     feature_dict["accel_mean"] = accel_mean(xyz) #3
     feature_dict["accel_median"] = accel_median(xyz) #3
     feature_dict["accel_std"] = accel_std(xyz) #3
@@ -256,10 +256,10 @@ def feature_extraction(
     feature_dict["skewness"] = skewness(xyz) #3
     feature_dict["kurtosis"] = kurtosis(xyz) #3
     feature_dict["avg_power"] = avg_power(xyz, sample_rate) #3
-    feature_dict["cadence"] = cadence(txyz, sample_rate) #1
-    feature_dict["step_time"] = step_time(txyz, sample_rate) #1
-    feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate) #1
-    feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate) #1
+    # feature_dict["cadence"] = cadence(txyz, sample_rate) #1
+    # feature_dict["step_time"] = step_time(txyz, sample_rate) #1
+    # feature_dict["num_of_steps"] = num_of_steps(txyz, sample_rate) #1
+    # feature_dict["gait_stretch"] = gait_stretch(txyz, sample_rate) #1
     # Extra features
     # feature_dict["avg_stft_per_frame"] = avg_stft_per_frame(xyz)
     # feature_dict["accel_fft_mean"] = accel_fft_mean(xyz)
