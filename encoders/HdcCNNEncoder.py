@@ -40,8 +40,10 @@ class HdcCNNEncoder(torch.nn.Module):
 
         #CNN for raw data
         self.conv1 = torch.nn.Conv1d(NUM_CHANNEL, 64, kernel_size=10)
-        self.conv2 = torch.nn.Conv1d(64, 64, kernel_size=10)
-        self.relu = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv1d(64, 128, kernel_size=10)
+        self.actv1 = torch.nn.ReLU()
+        self.actv2 = torch.nn.ReLU()
+        self.actv3 = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(0.5)
         self.maxpool = torch.nn.MaxPool1d(2)
         self.hdc_kernel = embeddings.Sinusoid(128, out_dimension, dtype=torch.float64)
@@ -72,13 +74,15 @@ class HdcCNNEncoder(torch.nn.Module):
         # Apply CNN
         signals = signals.transpose(0, 1).contiguous()
         x = self.conv1(signals[None, ...])
+        x = self.actv1(x)
         x = self.conv2(x)
-        x = self.relu(x)
+        x = self.actv2(x)
         x = self.dropout(x)
         x = self.maxpool(x)
         #Fully connected layer
         x = torch.flatten(x, 1)
         x = torch.nn.Linear(torch.numel(x), 128, device="cuda")(x)
+        x = self.actv3(x)
         #Convert extracted features into hypervector
         sample_hv = self.hdc_kernel(x)
 
