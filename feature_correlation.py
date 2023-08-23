@@ -29,20 +29,48 @@ def calculate_avg_corr(pid : str):
             #Create row of data frame
             row = {}
             row[0] = y #Label
-            for i in range(1, len(f)):
-                row[i] = f[i]
+            for i in range(0, len(f)):
+                row[i+1] = f[i]
             #Append
             df = pd.concat([df, pd.DataFrame(row, index=[0])], ignore_index=True)
 
         #Find correlation
         corr = df.corr(method='pearson')
+        print(corr)
 
-        # plotting correlation heatmap
-        dataplot = sb.heatmap(corr, cmap="YlGnBu", annot=True)
+        keep = []
+        for f in range(1, len(corr)):
+            if corr.iat[0, f] > 0.2:
+                keep.append(f)
+        print(keep)
         
-        # displaying heatmap
-        mp.show()
+        bind = []
+        bundle = []
+        no_connect = []
 
+        for f_x in keep:
+            for f_y in keep:
+                if f_x == f_y:
+                    continue
+                if corr.iat[f_x, f_y] > 0.8:
+                    bundle.append((f_x, f_y))
+                elif corr.iat[f_x, f_y] > 0.5:
+                    bind.append((f_x, f_y))
+                else:
+                    no_connect.append((f_x, f_y))
+
+        print("Outputting bind/bundle schema")
+        with open("data/%s_feature_bind_bundle_schema.txt" % pid, "w") as file2:
+            file2.write("Bundled feature pairs: ")
+            file2.write(','.join(bundle))
+            file2.write("\nBind feature pairs: ")
+            file2.write(','.join(bind))
+            file2.write("\nNot connected feature pairs: ")
+            file2.write(','.join(no_connect))
+
+
+            file2.close()
+        file.close()
 
 if __name__ == "__main__":
     for pid in PIDS:
