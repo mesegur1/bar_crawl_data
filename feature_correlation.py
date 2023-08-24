@@ -38,9 +38,12 @@ def calculate_avg_corr(pid : str):
         corr = df.corr(method='pearson')
         print(corr)
 
+        max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
+        print("Max correlation with TAC = %.5f" % max_tac_corr)
+
         keep = []
         for f in range(1, len(corr)):
-            if corr.iat[0, f] > 0.2:
+            if corr.iat[0, f] > max_tac_corr*0.5:
                 keep.append(f)
         print(keep)
         
@@ -62,11 +65,14 @@ def calculate_avg_corr(pid : str):
         print("Outputting bind/bundle schema")
         with open("data/%s_feature_bind_bundle_schema.txt" % pid, "w") as file2:
             file2.write("Bundled feature pairs: ")
-            file2.write(','.join(bundle))
+            for t in bundle:
+                file2.write("(%d, %d), " % t)
             file2.write("\nBind feature pairs: ")
-            file2.write(','.join(bind))
+            for t in bind:
+                file2.write("(%d, %d), " % t)
             file2.write("\nNot connected feature pairs: ")
-            file2.write(','.join(no_connect))
+            for t in no_connect:
+                file2.write("(%d, %d), " % t)
 
 
             file2.close()
