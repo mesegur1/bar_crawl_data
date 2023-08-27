@@ -5,18 +5,18 @@ from tqdm import tqdm
 
 PIDS = [
     "BK7610",
-    # "BU4707",
-    # "CC6740",
-    # "DC6359",
-    # "DK3500",
-    # "HV0618",
-    # "JB3156",
-    # "JR8022",
-    # "MC7070",
-    # "MJ8002",
-    # "PC6771",
-    # "SA0297",
-    # "SF3079",
+    "BU4707",
+    "CC6740",
+    "DC6359",
+    "DK3500",
+    "HV0618",
+    "JB3156",
+    "JR8022",
+    "MC7070",
+    "MJ8002",
+    "PC6771",
+    "SA0297",
+    "SF3079",
 ]
 
 df = pd.DataFrame()
@@ -78,8 +78,13 @@ def calculate_avg_corr():
     corr = df.corr(method='pearson')
     print("Correlation matrix shape: ", corr.shape)
 
+    return corr
+
+def generate_code_stubs(corr : pd.DataFrame):
     max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
+    min_tac_corr = np.min([corr.iat[0, f] for f in range(1, len(corr))])
     print("Max correlation with TAC = %.5f" % max_tac_corr)
+    print("Min correlation with TAC = %.5f" % min_tac_corr)
 
     keep = []
     for f in range(1, len(corr)):
@@ -112,21 +117,47 @@ def calculate_avg_corr():
             file.write(st)
 
     print("Generating code stubs")
-    generate_code_stubs(keep, bind_sets)
-
-def generate_code_stubs(keep : list, bind_sets : list):
     with open("data/feature_code_stubs.txt", "w") as file:
-        s = "feat_hvs = {{}}\n"
+        file.write("chosen_feat = [")
+        for k in keep:
+            file.write("%d, " % k)
+        file.write("]\n")
+        file.write("self.feat_kernels = {}\n")
+        file.write("for f in chosen_feat:\n")
+        file.write("    self.feat_kernels[f] = embeddings.Sinusoid(1, out_dimension, dtype=torch.float64, device=\"cuda\")")
+        file.write("\n\n\n")
+        s = "feat_hvs = {}\n"
         s2 = "feat_hvs[%d] = self.feat_kernels[%d](feat[%d].unsqueeze(0))\n"
         file.write(s)
         for k in keep:
             file.write(s2 % (k, k, k-1))
+        file.write("\n\n\n")
+        file.write("(\n")
+        for s in bind_sets:
+            s3 = "+ ("
+            for e in s:
+                s3 += "feat_hvs[%d] * " % e
+            s3 = s3.rstrip(" * ")
+            s3 += ")\n"
+            file.write(s3)
+        file.write(")")
 
 
 if __name__ == "__main__":
-    for pid in PIDS:
-        print("Load data for %s" % pid)
-        load_pid_data(pid)
-    print("Calculate correlation for all data, write to file")
-    calculate_avg_corr()
+    corr = None
+    try:
+        with open("data/correlations.pkl", "rb") as file:
+            print("Load precalculated correlation matrix")
+            corr = pickle.load(file)
+    except:
+        pass
+    if corr is None:
+        for pid in PIDS:
+            print("Load data for %s" % pid)
+            load_pid_data(pid)
+        print("Calculate correlation matrix")
+        corr = calculate_avg_corr()
+        with open("data/correlations.pkl", "wb") as file2:
+            pickle.dump(corr, file2)
+    generate_code_stubs(corr)
     
