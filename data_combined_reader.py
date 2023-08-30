@@ -46,16 +46,6 @@ PIDS = [
     "SF3079",
 ]
 
-class HiddenPrints:
-    def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stdout = self._original_stdout
-
-
 # Convert TAC measurement to a class
 def tac_to_class(tac: float):
     if tac < 0:
@@ -237,7 +227,7 @@ def feature_extraction(
     # Create dictionary of features
     feature_dict = OrderedDict()
     # Original features
-    feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate) #6
+    feature_dict["accel_mfcc_cov"] = accel_mfcc_cov(xyz, sample_rate) #91
     feature_dict["accel_rms"] = accel_rms(xyz) #3
     feature_dict["accel_mean"] = accel_mean(xyz) #3
     feature_dict["accel_median"] = accel_median(xyz) #3
@@ -318,13 +308,14 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
         window=frame_length,
     )
 
-    mfcc_cov_x = mfcc_x.T @ mfcc_x
-    mfcc_cov_y = mfcc_y.T @ mfcc_y
-    mfcc_cov_z = mfcc_z.T @ mfcc_z
-    mfcc_cov_xy = mfcc_x.T @ mfcc_y
-    mfcc_cov_xz = mfcc_x.T @ mfcc_z
-    mfcc_cov_yz = mfcc_y.T @ mfcc_z
-
+    indices = np.triu_indices(13, 0)
+    mfcc_cov_x = (mfcc_x @ mfcc_x.T)[indices]
+    mfcc_cov_y = (mfcc_y @ mfcc_y.T)[indices]
+    mfcc_cov_z = (mfcc_z @ mfcc_z.T)[indices]
+    mfcc_cov_xy = (mfcc_x @ mfcc_y.T)[indices]
+    mfcc_cov_xz = (mfcc_x @ mfcc_z.T)[indices]
+    mfcc_cov_yz = (mfcc_y @ mfcc_z.T)[indices]
+    
     mfcc_cov = np.concatenate(
         (mfcc_cov_x, mfcc_cov_y, mfcc_cov_z, mfcc_cov_xy, mfcc_cov_xz, mfcc_cov_yz),
         axis=None,

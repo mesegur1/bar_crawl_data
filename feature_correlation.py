@@ -3,6 +3,8 @@ import pandas as pd
 import pickle
 from tqdm import tqdm
 
+MFCC_FEAT_LENGTH = 78 * 6
+
 PIDS = [
     "BK7610",
     "BU4707",
@@ -75,7 +77,7 @@ def load_pid_data(pid : str):
 def calculate_avg_corr():
     global df
     #Find correlation
-    corr = df.corr(method='pearson')
+    corr = df.corr(method='spearman')
     print("Correlation matrix shape: ", corr.shape)
 
     return corr
@@ -83,17 +85,19 @@ def calculate_avg_corr():
 def generate_code_stubs(corr : pd.DataFrame):
     max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
     min_tac_corr = np.min([corr.iat[0, f] for f in range(1, len(corr))])
+    max_mfcc_tac_corr = np.max([corr.iat[0, f] for f in range(1, 1 + MFCC_FEAT_LENGTH)])
     print("Max correlation with TAC = %.5f" % max_tac_corr)
     print("Min correlation with TAC = %.5f" % min_tac_corr)
+    print("Max correlation of MFCC features with TAC = %.5f" % max_mfcc_tac_corr)
 
     keep = []
     for f in range(1, len(corr)):
-        if corr.iat[0, f] > 0:
+        if corr.iat[0, f] > 0.1:
             keep.append(f)
     print("keep: ", keep)
     
     #Form graph where edges are correlation above threshold
-    threshold = 0.5
+    threshold = 0.7
     g = Graph(len(corr))
     for f_x in keep:
         for f_y in keep:
