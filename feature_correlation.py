@@ -81,6 +81,12 @@ def calculate_avg_corr():
 
     return corr
 
+def which_feat_set(i : int):
+    return (i - MFCC_FEAT_LENGTH) // 3
+
+def feat_set_start_index(i : int):
+    return i*3 + MFCC_FEAT_LENGTH
+
 def generate_code_stubs(corr : pd.DataFrame):
     print("Correlation matrix shape: ", corr.shape)
     max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
@@ -90,6 +96,7 @@ def generate_code_stubs(corr : pd.DataFrame):
     print("Min correlation with TAC = %.5f" % min_tac_corr)
     print("Max correlation of MFCC features with TAC = %.5f" % max_mfcc_tac_corr)
 
+    #Choose what features to keep for consideration
     keep = []
     for f in range(1 + MFCC_FEAT_LENGTH, len(corr)):
         if corr.iat[0, f] > 0:
@@ -97,18 +104,21 @@ def generate_code_stubs(corr : pd.DataFrame):
     print("keep: ", keep)
     
     #Form graph where edges are correlation above threshold
-    threshold = 0.9
-    g = Graph(len(corr))
+    num_feat_sets = which_feat_set(len(corr))
+    threshold = 0.8
+    g = Graph(num_feat_sets)
     for f_x in keep:
         for f_y in keep:
             if f_x == f_y:
                 continue
             c = corr.iat[f_x, f_y]
             if c > threshold:
-                g.add_edge(f_x, f_y)
+                f_x_set = which_feat_set(f_x)
+                f_y_set = which_feat_set(f_y)
+                g.add_edge(f_x_set, f_y_set)
     #Get lists of binded features
     bind_sets = g.connected_components()
-    bind_sets = [s for s in bind_sets if s[0] in keep]
+    #bind_sets = [s for s in bind_sets if s[0] in keep]
 
     print("Outputting bind/bundle schema to file")
     with open("data/feature_bind_bundle_schema.txt", "w") as file:
@@ -122,20 +132,18 @@ def generate_code_stubs(corr : pd.DataFrame):
 
     print("Generating code stubs")
     with open("data/feature_code_stubs.txt", "w") as file:
-        file.write("chosen_feat = [")
-        for k in keep:
-            file.write("%d, " % k)
-        file.write("]\n")
         file.write("self.feat_kernels = {}\n")
-        file.write("for f in chosen_feat:\n")
-        file.write("    self.feat_kernels[f] = embeddings.Sinusoid(1, out_dimension, dtype=torch.float64, device=\"cuda\")")
+        file.write("for s in range(%d):\n" % num_feat_sets)
+        file.write("    self.feat_kernels[s] = embeddings.Sinusoid(3, out_dimension, dtype=torch.float64, device=\"cuda\")")
         file.write("\n\n\n")
+
         s = "feat_hvs = {}\n"
-        s2 = "feat_hvs[%d] = self.feat_kernels[%d](feat[%d].unsqueeze(0))\n"
+        s2 = "feat_hvs[%d] = self.feat_kernels[%d](feat[%d:%d])\n"
         file.write(s)
-        for k in keep:
-            file.write(s2 % (k, k, k-1))
+        for s in range(num_feat_sets):
+            file.write(s2 % (s, s, feat_set_start_index(s), feat_set_start_index(s)+3))
         file.write("\n\n\n")
+
         file.write("(\n")
         for s in bind_sets:
             s3 = "+ ("
