@@ -281,33 +281,43 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
     x = xyz[:, 0]
     y = xyz[:, 1]
     z = xyz[:, 2]
-    frame_length = xyz.shape[0]
-    warnings.filterwarnings("ignore")  # There is a harmless padding warning
-    mfcc_x = librosa.feature.mfcc(
-        y=x,
-        sr=sample_rate,
-        n_mfcc=13,
-        n_fft=frame_length,
-        lifter=22,
-        window=frame_length,
-    )
-    mfcc_y = librosa.feature.mfcc(
-        y=y,
-        sr=sample_rate,
-        n_mfcc=13,
-        n_fft=frame_length,
-        lifter=22,
-        window=frame_length,
-    )
-    mfcc_z = librosa.feature.mfcc(
-        y=z,
-        sr=sample_rate,
-        n_mfcc=13,
-        n_fft=frame_length,
-        lifter=22,
-        window=frame_length,
-    )
 
+    #Split into four subwindows and perform MFCC on them to form 13x4 matrix
+    frame_length = xyz.shape[0] // 4
+    warnings.filterwarnings("ignore")  # There is a harmless padding warning
+    mfcc_x = np.zeros((13, 4))
+    mfcc_y = np.zeros((13, 4))
+    mfcc_z = np.zeros((13, 4))
+    for i in range(4):
+        m_x = librosa.feature.mfcc(
+            y=x[i*frame_length:(i+1)*frame_length],
+            sr=sample_rate,
+            n_mfcc=13,
+            n_fft=frame_length,
+            lifter=0,
+            window=frame_length,
+        )
+        mfcc_x[:, i] = m_x[:, 0]
+        m_y = librosa.feature.mfcc(
+            y=y[i*frame_length:(i+1)*frame_length],
+            sr=sample_rate,
+            n_mfcc=13,
+            n_fft=frame_length,
+            lifter=0,
+            window=frame_length,
+        )
+        mfcc_y[:, i] = m_y[:, 0]
+        m_z = librosa.feature.mfcc(
+            y=z[i*frame_length:(i+1)*frame_length],
+            sr=sample_rate,
+            n_mfcc=13,
+            n_fft=frame_length,
+            lifter=0,
+            window=frame_length,
+        )
+        mfcc_z[:, i] = m_z[:, 0]
+
+    #Form covariance matrices and take upper triangle values
     indices = np.triu_indices(13, 0)
     mfcc_cov_x = (mfcc_x @ mfcc_x.T)[indices]
     mfcc_cov_y = (mfcc_y @ mfcc_y.T)[indices]
