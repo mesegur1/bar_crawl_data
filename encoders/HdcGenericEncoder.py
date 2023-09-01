@@ -85,7 +85,6 @@ class HdcGenericEncoder(torch.nn.Module):
             # 17 AVG_POWER_START = KURTOSIS_START + NUM_FEAT_ITEMS_GENERAL
 
         #Combine hypervectors
-        mfcc_hv = torchhd.multiset(torch.concat(mfcc_feat_hvs, dim=0))
         sample_hv = (
             sample_hv
             * (
@@ -93,7 +92,10 @@ class HdcGenericEncoder(torch.nn.Module):
                 * (feat_hvs[1] + feat_hvs[2] + feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
                 * (feat_hvs[6])
                 * (feat_hvs[8] + feat_hvs[9] + feat_hvs[10] + feat_hvs[11] + feat_hvs[12] + feat_hvs[13] + feat_hvs[14])
-                * mfcc_hv
+                * (mfcc_feat_hvs[0] + mfcc_feat_hvs[1] + mfcc_feat_hvs[3])
+                * (mfcc_feat_hvs[1] + mfcc_feat_hvs[5])
+                * (mfcc_feat_hvs[3] + mfcc_feat_hvs[4])
+                * (mfcc_feat_hvs[2])
             )
         )
 
