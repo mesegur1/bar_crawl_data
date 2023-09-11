@@ -32,18 +32,18 @@ MOTION_EPSILON = 0.0001
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PIDS = [
     "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
+    # "BU4707",
+    # "CC6740",
+    # "DC6359",
+    # "DK3500",
+    # "HV0618",
+    # "JB3156",
+    # "JR8022",
+    # "MC7070",
+    # "MJ8002",
+    # "PC6771",
+    # "SA0297",
+    # "SF3079",
 ]
 
 # Convert TAC measurement to a class
@@ -283,19 +283,21 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
     z = xyz[:, 2]
 
     #Split into four subwindows and perform MFCC on them to form 13x4 matrix
-    frame_length = xyz.shape[0] // 4
+    frame_length = xyz.shape[0] // 10
     warnings.filterwarnings("ignore")  # There is a harmless padding warning
-    mfcc_x = np.zeros((13, 4))
-    mfcc_y = np.zeros((13, 4))
-    mfcc_z = np.zeros((13, 4))
-    for i in range(4):
+    mfcc_x = np.zeros((13, 10))
+    mfcc_y = np.zeros((13, 10))
+    mfcc_z = np.zeros((13, 10))
+    for i in range(10):
         m_x = librosa.feature.mfcc(
             y=x[i*frame_length:(i+1)*frame_length],
             sr=sample_rate,
             n_mfcc=13,
             n_fft=frame_length,
-            lifter=0,
+            lifter=26,
+            hop_length=frame_length,
             window=frame_length,
+            norm="ortho",
         )
         mfcc_x[:, i] = m_x[:, 0]
         m_y = librosa.feature.mfcc(
@@ -303,8 +305,10 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
             sr=sample_rate,
             n_mfcc=13,
             n_fft=frame_length,
-            lifter=0,
+            lifter=26,
+            hop_length=frame_length,
             window=frame_length,
+            norm="ortho",
         )
         mfcc_y[:, i] = m_y[:, 0]
         m_z = librosa.feature.mfcc(
@@ -312,8 +316,10 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
             sr=sample_rate,
             n_mfcc=13,
             n_fft=frame_length,
-            lifter=0,
+            lifter=26,
+            hop_length=frame_length,
             window=frame_length,
+            norm="ortho",
         )
         mfcc_z[:, i] = m_z[:, 0]
 

@@ -24,9 +24,9 @@ class HdcGenericEncoder(torch.nn.Module):
         self.feat_kernels = {}
         for s in range(18):
             self.feat_kernels[s] = embeddings.Sinusoid(3, out_dimension, dtype=torch.float64, device="cuda")
-        self.mfcc_feat_kernels = []
-        for _ in range(6):
-            self.mfcc_feat_kernels.append(embeddings.Sinusoid(MFCC_COV_FEAT_LENGTH, out_dimension, dtype=torch.float64, device="cuda"))
+        self.mfcc_feat_kernels = {}
+        for s in range(6):
+            self.mfcc_feat_kernels[s] = embeddings.Sinusoid(MFCC_COV_FEAT_LENGTH, out_dimension, dtype=torch.float64, device="cuda")
 
     # Encode window of raw features (t,x,y,z) and extracted feature vectors (f,)
     def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
@@ -84,19 +84,19 @@ class HdcGenericEncoder(torch.nn.Module):
             # 16 KURTOSIS_START = SKEWNESS_START + NUM_FEAT_ITEMS_GENERAL
             # 17 AVG_POWER_START = KURTOSIS_START + NUM_FEAT_ITEMS_GENERAL
 
+#      3         4   5      0    1    2
+# 3 * XY + 2 * (XZ + YZ) + (XX + YY + ZZ)
+
+
         #Combine hypervectors
         sample_hv = (
             sample_hv
             * (
-                (feat_hvs[0] + feat_hvs[7] + feat_hvs[15] + feat_hvs[16] + feat_hvs[17])
-                * (feat_hvs[1] + feat_hvs[2] + feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
+                (feat_hvs[0] + feat_hvs[15] + feat_hvs[17])
+                * (feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
                 * (feat_hvs[6])
-                * (feat_hvs[8] + feat_hvs[9] + feat_hvs[10] + feat_hvs[11] + feat_hvs[12] + feat_hvs[13] + feat_hvs[14])
-                * (mfcc_feat_hvs[0] + mfcc_feat_hvs[1] + mfcc_feat_hvs[3])
-                * (mfcc_feat_hvs[1] + mfcc_feat_hvs[5])
-                * (mfcc_feat_hvs[3] + mfcc_feat_hvs[4])
-                * (mfcc_feat_hvs[2])
-            )
+                * (feat_hvs[11] + feat_hvs[12])
+            ) 
         )
 
         # Apply activation function

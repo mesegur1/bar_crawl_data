@@ -9,18 +9,18 @@ MFCC_FEAT_LENGTH = MFCC_COV_FEAT_LENGTH * MFCC_COV_NUM
 
 PIDS = [
     "BK7610",
-    "BU4707",
-    "CC6740",
-    "DC6359",
-    "DK3500",
-    "HV0618",
-    "JB3156",
-    "JR8022",
-    "MC7070",
-    "MJ8002",
-    "PC6771",
-    "SA0297",
-    "SF3079",
+    # "BU4707",
+    # "CC6740",
+    # "DC6359",
+    # "DK3500",
+    # "HV0618",
+    # "JB3156",
+    # "JR8022",
+    # "MC7070",
+    # "MJ8002",
+    # "PC6771",
+    # "SA0297",
+    # "SF3079",
 ]
 
 df = pd.DataFrame()
@@ -109,28 +109,41 @@ def generate_code_stubs(corr : pd.DataFrame):
     ###
 
     #Choose what features to keep for consideration
-    keep = []
-    for f in range(1 + MFCC_FEAT_LENGTH, len(corr)):
-        if corr.iat[0, f] > 0:
-            keep.append(f)
-    print("Non MFCC keep: ", keep)
-    #Form graph where edges are correlation above threshold
     num_feat_sets = which_feat_set(len(corr))
-    threshold = 0.7
-    g = Graph(num_feat_sets)
-    for f_x in keep:
-        for f_y in keep:
+    tac_corr = np.zeros((num_feat_sets, 1))
+    m2 = np.zeros((num_feat_sets, 1))
+    for f in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+        c = corr.iat[0, f]
+        f_set = which_feat_set(f)
+        tac_corr[f_set] += c
+        m2[f_set] += 1
+    tac_corr = tac_corr / m2
+
+    feat_sets_keep = [i for i in range(num_feat_sets) if tac_corr[i] > 0]
+    
+
+    feat_corr = np.zeros((num_feat_sets, num_feat_sets))
+    m = np.zeros((num_feat_sets, num_feat_sets))
+    for f_x in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+        for f_y in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+            c = corr.iat[f_x, f_y]
+            f_x_set = which_feat_set(f_x)
+            f_y_set = which_feat_set(f_y)
+            m[f_x_set, f_y_set] += 1
+            feat_corr[f_x_set, f_y_set] += c
+    feat_corr = feat_corr / m
+
+    graph = Graph(num_feat_sets)
+    for f_x in feat_sets_keep:
+        for f_y in feat_sets_keep:
             if f_x == f_y:
                 continue
-            c = corr.iat[f_x, f_y]
-            if c > threshold:
-                f_x_set = which_feat_set(f_x)
-                f_y_set = which_feat_set(f_y)
-                g.add_edge(f_x_set, f_y_set)
-    #Get lists of binded features
-    bind_sets = g.connected_components()
-    #Use only the sets that have keep elements
-    #bind_sets = [s for s in bind_sets if which_feat_set(k) == s for k in keep]
+            c = feat_corr[f_x, f_y]
+            if c > 0.7:
+                graph.add_edge(f_x, f_y)
+    feat_bind_sets = graph.connected_components()
+    feat_bind_sets = [s for s in feat_bind_sets if s[0] in feat_sets_keep]
+    print(feat_bind_sets)
 
     ###
     # MFCC correlations
@@ -161,58 +174,6 @@ def generate_code_stubs(corr : pd.DataFrame):
             mfcc_corr[f_x_set, f_y_set] += c
     mfcc_corr = mfcc_corr / m
 
-
-    # keep = [f for f in range(1, MFCC_FEAT_LENGTH+1)]
-    # #Form graph where edges are correlation above threshold
-    # threshold = 0.65
-    # ratio = 0.8
-    # m = np.zeros((MFCC_COV_NUM, MFCC_COV_NUM), dtype=int)
-    # for f_x in keep:
-    #     for f_y in keep:
-    #         if f_x == f_y:
-    #             continue
-    #         c = corr.iat[f_x, f_y]
-    #         if c > threshold:
-    #             f_x_set = which_mfcc_feat_set(f_x)
-    #             f_y_set = which_mfcc_feat_set(f_y)
-    #             m[f_x_set, f_y_set] += 1
-    # g = Graph(MFCC_COV_NUM)
-    # for x in range(MFCC_COV_NUM):
-    #     for y in range(MFCC_COV_NUM):
-    #         if x == y:
-    #             continue
-    #         if m[x, y] > int(ratio*MFCC_COV_FEAT_LENGTH):
-    #             g.add_edge(x, y)
-    # #Get lists of binded features
-    # mfcc_bind_sets = g.connected_components() 
-    # 
-
-    mfcc_xy_keep = {}
-    for f in range(1, MFCC_FEAT_LENGTH + 1):
-        c = corr.iat[0, f]
-        if c > 0:
-            mfcc_xy_keep[f] = c
-    mfcc_xy = sorted(mfcc_xy_keep.items(), key=lambda item : item[1], reverse=True)
-    mfcc_xy = sorted(mfcc_xy[0 : 20])
-    print(len(mfcc_xy))
-    print(mfcc_xy)
-
-    print("mfcc_xy_feat = feat[", end="")
-    for f in mfcc_xy:
-        print(("%d, " % f[0]), end="")
-    print("]")
-    
-
-    print("Outputting bind/bundle schema to file")
-    with open("data/feature_bind_bundle_schema.txt", "w") as file:
-        file.write("Non MFCC kept features: \n")
-        for k in keep:
-            file.write("%d, " % k)        
-        file.write("\nBundled/bind schema (%d sets): \n" % len(bind_sets))
-        for s in bind_sets:
-            st = str(s) + "\n"
-            file.write(st)
-
     print("Generating code stubs")
     with open("data/feature_code_stubs.txt", "w") as file:
         file.write("NON MFCC FEAT CODE STUBS:\n")
@@ -229,15 +190,13 @@ def generate_code_stubs(corr : pd.DataFrame):
             file.write(s2 % (s, s, feat_set_start_index(s), feat_set_start_index(s)+3))
         file.write("\n\n\n")
 
-        file.write("(\n")
-        for s in bind_sets:
-            s3 = "* ("
-            for e in s:
-                s3 += "feat_hvs[%d] + " % e
-            s3 = s3.rstrip(" + ")
-            s3 += ")\n"
-            file.write(s3)
-        file.write(")\n\n\n")
+        file.write("Feat set correlation with TAC:\n\n")
+        for i in range(tac_corr.shape[0]):
+            file.write("%d, %.5f\n" % (i, tac_corr[i]))
+        file.write("\n\n\n")
+        file.write("Feat set correlation matrix:\n\n")
+        file.write(np.array2string(feat_corr))
+        file.write("\n\n\n")
 
         file.write("MFCC FEAT CODE STUBS:\n")
 
@@ -253,15 +212,6 @@ def generate_code_stubs(corr : pd.DataFrame):
             file.write(s2 % (s, s, mfcc_feat_set_start_index(s), mfcc_feat_set_start_index(s)+MFCC_COV_FEAT_LENGTH))
         file.write("\n\n\n")
 
-        # file.write("(\n")
-        # for s in mfcc_bind_sets:
-        #     s3 = "* ("
-        #     for e in s:
-        #         s3 += "mfcc_feat_hvs[%d] + " % e
-        #     s3 = s3.rstrip(" + ")
-        #     s3 += ")\n"
-        #     file.write(s3)
-        # file.write(")")
         file.write("Relevant sets:")
         file.write(str(mfcc_sets))
         file.write("\n\n\n")
@@ -271,12 +221,6 @@ def generate_code_stubs(corr : pd.DataFrame):
         file.write("MFCC set correlation matrix:\n\n")
         file.write(np.array2string(mfcc_corr))
         file.write("\n\n\n")
-
-        file.write("mfcc_xy_feat = feat[")
-        for f in mfcc_xy:
-            file.write(("%d, " % f[0]))
-        file.write("]\n")
-
 
 
 
