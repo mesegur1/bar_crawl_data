@@ -187,18 +187,18 @@ def generate_code_stubs(corr : pd.DataFrame):
     # mfcc_bind_sets = g.connected_components() 
     # 
 
-    mfcc_xy_keep = {}
+    mfcc_keep = {}
     for f in range(1, MFCC_FEAT_LENGTH + 1):
         c = corr.iat[0, f]
         if c > 0:
-            mfcc_xy_keep[f] = c
-    mfcc_xy = sorted(mfcc_xy_keep.items(), key=lambda item : item[1], reverse=True)
-    mfcc_xy = sorted(mfcc_xy[0 : 20])
-    print(len(mfcc_xy))
-    print(mfcc_xy)
+            mfcc_keep[f] = c
+    mfcc_feat = sorted(mfcc_keep.items(), key=lambda item : item[1], reverse=True)
+    mfcc_feat = sorted(mfcc_feat[0 : 20])
+    print(len(mfcc_feat))
+    print(mfcc_feat)
 
-    print("mfcc_xy_feat = feat[", end="")
-    for f in mfcc_xy:
+    print("mfcc_feat = feat[", end="")
+    for f in mfcc_feat:
         print(("%d, " % f[0]), end="")
     print("]")
     
@@ -272,10 +272,10 @@ def generate_code_stubs(corr : pd.DataFrame):
         file.write(np.array2string(mfcc_corr))
         file.write("\n\n\n")
 
-        file.write("mfcc_xy_feat = feat[")
-        for f in mfcc_xy:
+        file.write("mfcc_feat = feat[[")
+        for f in mfcc_feat:
             file.write(("%d, " % f[0]))
-        file.write("]\n")
+        file.write("]]\n")
 
 
 

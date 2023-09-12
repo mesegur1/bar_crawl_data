@@ -27,6 +27,7 @@ class HdcGenericEncoder(torch.nn.Module):
         self.mfcc_feat_kernels = {}
         for s in range(6):
             self.mfcc_feat_kernels[s] = embeddings.Sinusoid(MFCC_COV_FEAT_LENGTH, out_dimension, dtype=torch.float64, device="cuda")
+        self.mfcc_feat_kernel = embeddings.Sinusoid(20, out_dimension, dtype=torch.float64, device="cuda")
 
     # Encode window of raw features (t,x,y,z) and extracted feature vectors (f,)
     def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
@@ -56,36 +57,37 @@ class HdcGenericEncoder(torch.nn.Module):
         feat_hvs[16] = self.feat_kernels[16](feat[594:597])
         feat_hvs[17] = self.feat_kernels[17](feat[597:600])
 
-        mfcc_feat_hvs = []
-        for i in range(MFCC_COV_NUM):
-            mfcc_feat_hvs.append(self.mfcc_feat_kernels[i](feat[i*MFCC_COV_FEAT_LENGTH:(i+1)*MFCC_COV_FEAT_LENGTH]))
+        #MFCC features to use
+        mfcc_feat = feat[[14, 24, 37, 105, 115, 196, 197, 198, 206, 211, 219, 287, 378, 380, 391, 393, 401, 469, 471, 484, ]]
+        mfcc_feat_hv = self.mfcc_feat_kernel(mfcc_feat)
 
-            # (feat_hvs[0] + feat_hvs[7] + feat_hvs[15] + feat_hvs[16] + feat_hvs[17])
-            # * (feat_hvs[1] + feat_hvs[2] + feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
-            # * (feat_hvs[6])
-            # * (feat_hvs[8] + feat_hvs[9] + feat_hvs[10] + feat_hvs[11] + feat_hvs[12] + feat_hvs[13] + feat_hvs[14])
+        # mfcc_feat_hvs = []
+        # for i in range(MFCC_COV_NUM):
+        #     mfcc_feat_hvs.append(self.mfcc_feat_kernels[i](feat[i*MFCC_COV_FEAT_LENGTH:(i+1)*MFCC_COV_FEAT_LENGTH]))
 
-            # 0 RMS_START = MFCC_START + NUM_FEAT_ITEMS_MFCC
-            # 1 MEAN_START = RMS_START + NUM_FEAT_ITEMS_GENERAL
-            # 2 MEDIAN_START = MEAN_START + NUM_FEAT_ITEMS_GENERAL
-            # 3 STD_START = MEDIAN_START + NUM_FEAT_ITEMS_GENERAL
-            # 4 ABS_MAX_START = STD_START + NUM_FEAT_ITEMS_GENERAL
-            # 5 ABS_MIN_START = ABS_MAX_START + NUM_FEAT_ITEMS_GENERAL
-            # 6 FFT_MAX_START = ABS_MIN_START + NUM_FEAT_ITEMS_GENERAL
-            # 7 ZERO_CROSS_RATE_START = FFT_MAX_START + NUM_FEAT_ITEMS_GENERAL
-            # 8 SPECTRAL_ENTROPY_START = ZERO_CROSS_RATE_START + NUM_FEAT_ITEMS_GENERAL
-            # 9 SPECTRAL_ENTROPY_FFT_START = SPECTRAL_ENTROPY_START + NUM_FEAT_ITEMS_GENERAL
-            # 10 SPECTRAL_CENTROID_START = SPECTRAL_ENTROPY_FFT_START + NUM_FEAT_ITEMS_GENERAL
-            # 11 SPECTRAL_SPREAD_START = SPECTRAL_CENTROID_START + NUM_FEAT_ITEMS_GENERAL
-            # 12 SPECTRAL_FLUX_START = SPECTRAL_SPREAD_START + NUM_FEAT_ITEMS_GENERAL
-            # 13 SPECTRAL_ROLLOFF_START = SPECTRAL_FLUX_START + NUM_FEAT_ITEMS_GENERAL
-            # 14 SPECTRAL_PEAK_RATIO_START = SPECTRAL_ROLLOFF_START + NUM_FEAT_ITEMS_GENERAL
-            # 15 SKEWNESS_START = SPECTRAL_PEAK_RATIO_START + NUM_FEAT_ITEMS_GENERAL
-            # 16 KURTOSIS_START = SKEWNESS_START + NUM_FEAT_ITEMS_GENERAL
-            # 17 AVG_POWER_START = KURTOSIS_START + NUM_FEAT_ITEMS_GENERAL
+        # (feat_hvs[0] + feat_hvs[7] + feat_hvs[15] + feat_hvs[16] + feat_hvs[17])
+        # * (feat_hvs[1] + feat_hvs[2] + feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
+        # * (feat_hvs[6])
+        # * (feat_hvs[8] + feat_hvs[9] + feat_hvs[10] + feat_hvs[11] + feat_hvs[12] + feat_hvs[13] + feat_hvs[14])
 
-#      3         4   5      0    1    2
-# 3 * XY + 2 * (XZ + YZ) + (XX + YY + ZZ)
+        # 0 RMS_START = MFCC_START + NUM_FEAT_ITEMS_MFCC
+        # 1 MEAN_START = RMS_START + NUM_FEAT_ITEMS_GENERAL
+        # 2 MEDIAN_START = MEAN_START + NUM_FEAT_ITEMS_GENERAL
+        # 3 STD_START = MEDIAN_START + NUM_FEAT_ITEMS_GENERAL
+        # 4 ABS_MAX_START = STD_START + NUM_FEAT_ITEMS_GENERAL
+        # 5 ABS_MIN_START = ABS_MAX_START + NUM_FEAT_ITEMS_GENERAL
+        # 6 FFT_MAX_START = ABS_MIN_START + NUM_FEAT_ITEMS_GENERAL
+        # 7 ZERO_CROSS_RATE_START = FFT_MAX_START + NUM_FEAT_ITEMS_GENERAL
+        # 8 SPECTRAL_ENTROPY_START = ZERO_CROSS_RATE_START + NUM_FEAT_ITEMS_GENERAL
+        # 9 SPECTRAL_ENTROPY_FFT_START = SPECTRAL_ENTROPY_START + NUM_FEAT_ITEMS_GENERAL
+        # 10 SPECTRAL_CENTROID_START = SPECTRAL_ENTROPY_FFT_START + NUM_FEAT_ITEMS_GENERAL
+        # 11 SPECTRAL_SPREAD_START = SPECTRAL_CENTROID_START + NUM_FEAT_ITEMS_GENERAL
+        # 12 SPECTRAL_FLUX_START = SPECTRAL_SPREAD_START + NUM_FEAT_ITEMS_GENERAL
+        # 13 SPECTRAL_ROLLOFF_START = SPECTRAL_FLUX_START + NUM_FEAT_ITEMS_GENERAL
+        # 14 SPECTRAL_PEAK_RATIO_START = SPECTRAL_ROLLOFF_START + NUM_FEAT_ITEMS_GENERAL
+        # 15 SKEWNESS_START = SPECTRAL_PEAK_RATIO_START + NUM_FEAT_ITEMS_GENERAL
+        # 16 KURTOSIS_START = SKEWNESS_START + NUM_FEAT_ITEMS_GENERAL
+        # 17 AVG_POWER_START = KURTOSIS_START + NUM_FEAT_ITEMS_GENERAL
 
 
         #Combine hypervectors
@@ -97,6 +99,7 @@ class HdcGenericEncoder(torch.nn.Module):
                 * (feat_hvs[6])
                 * (feat_hvs[11] + feat_hvs[12])
             ) 
+            + mfcc_feat_hv
         )
 
         # Apply activation function
