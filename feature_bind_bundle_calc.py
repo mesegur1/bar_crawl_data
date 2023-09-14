@@ -93,16 +93,31 @@ def calculate_avg_similarity():
     return sim
 
 def which_feat_set(i : int):
-    return (i - MFCC_FEAT_LENGTH - 1) // 3
+    if i < MFCC_FEAT_LENGTH:
+        #MFCC set
+        s = (i - 1) // MFCC_COV_FEAT_LENGTH
+    else:
+        #Non-MFCC set
+        s = (i - MFCC_FEAT_LENGTH - 1) // 3 + MFCC_COV_NUM
+    return s
 
 def feat_set_start_index(i : int):
-    return i*3 + MFCC_FEAT_LENGTH
+    if i < MFCC_COV_NUM:
+        #MFCC set  (0 - 5)
+        idx = i * MFCC_COV_FEAT_LENGTH
+    else:
+        #Non-MFCC set (6 - 23)
+        # 6 -> 546
+        idx = (i - MFCC_COV_NUM) * 3 + MFCC_FEAT_LENGTH
+    return idx
 
-def which_mfcc_feat_set(i : int):
-    return (i - 1) // MFCC_COV_FEAT_LENGTH
-
-def mfcc_feat_set_start_index(i : int):
-    return i * MFCC_COV_FEAT_LENGTH
+def feat_set_end_index(i : int):
+    idx = feat_set_start_index(i) 
+    if i < MFCC_COV_NUM:
+        idx += MFCC_COV_FEAT_LENGTH
+    else:
+        idx += 3
+    return idx 
 
 def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     print("Correlation matrix shape: ", corr.shape)
@@ -125,8 +140,8 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     num_feat_sets = which_feat_set(len(corr))
     set_corr = np.zeros((num_feat_sets, num_feat_sets))
     m1 = np.zeros((num_feat_sets, num_feat_sets))
-    for f_x in range(1 + MFCC_FEAT_LENGTH, len(corr)):
-        for f_y in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+    for f_x in range(1 , len(corr)):
+        for f_y in range(1, len(corr)):
             f_x_set = which_feat_set(f_x)
             f_y_set = which_feat_set(f_y)
             if f_x_set == f_y_set:
@@ -139,8 +154,8 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     #Compute similarities between sets
     set_sim = np.zeros((num_feat_sets, num_feat_sets))
     m2 = np.zeros((num_feat_sets, num_feat_sets))
-    for f_x in range(1 + MFCC_FEAT_LENGTH, len(corr)):
-        for f_y in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+    for f_x in range(1, len(corr)):
+        for f_y in range(1, len(corr)):
             f_x_set = which_feat_set(f_x)
             f_y_set = which_feat_set(f_y)
             if f_x_set == f_y_set:
@@ -154,17 +169,18 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     #Choose what features to keep for consideration
     tac_corr = np.zeros((num_feat_sets, 1))
     m3 = np.zeros((num_feat_sets, 1))
-    for f in range(1 + MFCC_FEAT_LENGTH, len(corr)):
+    for f in range(1, len(corr)):
         c = corr.iat[0, f]
         f_set = which_feat_set(f)
         tac_corr[f_set] += c
         m3[f_set] += 1
+    m3 = np.where(m3 == 0, 1, m3)
     tac_corr = tac_corr / m3
     feat_sets_keep = [i for i in range(num_feat_sets) if tac_corr[i] > 0]
 
     #Form graph where edges are correlation above threshold
-    c_threshold = 0.5
-    s_threshold = 0.7
+    c_threshold = 0.8
+    s_threshold = 0.5
     g_bind = Graph(num_feat_sets)
     g_bundle = Graph(num_feat_sets)
     for f_x in range(num_feat_sets):
@@ -187,6 +203,27 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
 
     print("Outputting bind/bundle schema to file")
     with open("data/feature_bind_bundle_schema.txt", "w") as file: 
+        file.write("Feat set correlation with TAC:\n\n")
+        for i in range(tac_corr.shape[0]):
+            file.write("%d, %.5f\n" % (i, tac_corr[i]))
+        file.write("\n\n\n")
+
+        s1 = "        self.feat_kernels[s] = embeddings.Sinusoid(3, out_dimension, dtype=torch.float64, device=\"cuda\")\n"
+        s2 = "        self.feat_kernels[s] = embeddings.Sinusoid(%d, out_dimension, dtype=torch.float64, device=\"cuda\")\n" % MFCC_COV_FEAT_LENGTH
+        file.write("self.feat_kernels = {}\n")
+        file.write("for s in range(%d):\n" % num_feat_sets)
+        file.write("    if s < %d:\n" % MFCC_COV_NUM)
+        file.write(s2)
+        file.write("    else:\n")
+        file.write(s1)
+        file.write("\n\n\n")
+        s = "feat_hvs = {}\n"
+        s2 = "feat_hvs[%d] = self.feat_kernels[%d](feat[%d:%d])\n"
+        file.write(s)
+        for s in range(num_feat_sets):
+            file.write(s2 % (s, s, feat_set_start_index(s), feat_set_end_index(s)))
+        file.write("\n\n\n")
+
         file.write("\nBundled/bind schema\n\n")
         file.write("Bind sets:\n")
         for s in bind_sets:
