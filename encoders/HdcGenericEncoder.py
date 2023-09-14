@@ -24,10 +24,11 @@ class HdcGenericEncoder(torch.nn.Module):
         self.feat_kernels = {}
         for s in range(18):
             self.feat_kernels[s] = embeddings.Sinusoid(3, out_dimension, dtype=torch.float64, device="cuda")
-        self.mfcc_feat_kernels = {}
-        for s in range(6):
-            self.mfcc_feat_kernels[s] = embeddings.Sinusoid(MFCC_COV_FEAT_LENGTH, out_dimension, dtype=torch.float64, device="cuda")
-        self.mfcc_feat_kernel = embeddings.Sinusoid(20, out_dimension, dtype=torch.float64, device="cuda")
+        # self.mfcc_feat_kernels = {}
+        # for s in range(6):
+        #     self.mfcc_feat_kernels[s] = embeddings.Sinusoid(MFCC_COV_FEAT_LENGTH, out_dimension, dtype=torch.float64, device="cuda")
+        # self.mfcc_feat_kernel = embeddings.Sinusoid(20, out_dimension, dtype=torch.float64, device="cuda")
+        self.mfcc_feat_level = embeddings.Level(1000, out_dimension, dtype=torch.float64)
 
     # Encode window of raw features (t,x,y,z) and extracted feature vectors (f,)
     def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
@@ -57,9 +58,17 @@ class HdcGenericEncoder(torch.nn.Module):
         feat_hvs[16] = self.feat_kernels[16](feat[594:597])
         feat_hvs[17] = self.feat_kernels[17](feat[597:600])
 
-        #MFCC features to use
-        mfcc_feat = feat[[14, 24, 37, 105, 115, 196, 197, 198, 206, 211, 219, 287, 378, 380, 391, 393, 401, 469, 471, 484, ]]
-        mfcc_feat_hv = self.mfcc_feat_kernel(mfcc_feat)
+        # #MFCC features to use
+        mfcc_feat = feat[[14, 15, 16, 17, 18, 20, 22, 24, 26, 27, 28, 29, 31, 37, 38, 39, 105, 106, 107, 
+                          108, 109, 111, 113, 115, 117, 118, 120, 128, 129, 130, 196, 197, 198, 199, 200, 
+                          201, 202, 203, 204, 206, 208, 209, 210, 211, 212, 213, 219, 220, 221, 285, 287, 
+                          288, 289, 290, 291, 293, 295, 297, 299, 300, 301, 302, 310, 311, 312, 374, 376, 
+                          378, 379, 380, 381, 382, 384, 386, 388, 390, 391, 392, 393, 395, 401, 402, 403, 
+                          467, 469, 470, 471, 472, 473, 474, 475, 477, 479, 481, 482, 483, 484, 486, 492, 
+                          494, ]]
+        mfcc_feat = torch.nn.functional.normalize(mfcc_feat, dim=0)
+        mfcc_feat_hvs = torchhd.soft_quantize(self.mfcc_feat_level(mfcc_feat))
+        mfcc_feat_hv = torchhd.multibind(mfcc_feat_hvs)
 
         # mfcc_feat_hvs = []
         # for i in range(MFCC_COV_NUM):
@@ -98,8 +107,7 @@ class HdcGenericEncoder(torch.nn.Module):
                 * (feat_hvs[3] + feat_hvs[4] + feat_hvs[5])
                 * (feat_hvs[6])
                 * (feat_hvs[11] + feat_hvs[12])
-            ) 
-            + mfcc_feat_hv
+            ) * (sample_hv + mfcc_feat_hv)
         )
 
         # Apply activation function

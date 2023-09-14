@@ -193,7 +193,7 @@ def generate_code_stubs(corr : pd.DataFrame):
         if c > 0:
             mfcc_keep[f] = c
     mfcc_feat = sorted(mfcc_keep.items(), key=lambda item : item[1], reverse=True)
-    mfcc_feat = sorted(mfcc_feat[0 : 20])
+    mfcc_feat = sorted(mfcc_feat[0 : 100])
     print(len(mfcc_feat))
     print(mfcc_feat)
 
