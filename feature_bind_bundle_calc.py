@@ -148,8 +148,6 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
         for f_y in range(1, len(corr)):
             f_x_set = which_feat_set(f_x)
             f_y_set = which_feat_set(f_y)
-            if f_x_set == f_y_set:
-                continue
             set_corr[f_x_set, f_y_set] += corr.iat[f_x, f_y]
             m1[f_x_set, f_y_set] += 1
     m1 = np.where(m1 == 0, 1, m1)
@@ -162,8 +160,6 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
         for f_y in range(1, len(corr)):
             f_x_set = which_feat_set(f_x)
             f_y_set = which_feat_set(f_y)
-            if f_x_set == f_y_set:
-                continue
             set_sim[f_x_set, f_y_set] += sim[f_x, f_y]
             m2[f_x_set, f_y_set] += 1
     m2 = np.where(m2 == 0, 1, m2)
@@ -182,6 +178,16 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     tac_corr = tac_corr / m3
     feat_sets_keep = [i for i in range(num_feat_sets) if tac_corr[i] > 0]
 
+    bind_sets = []
+    for f_x in range(num_feat_sets):
+        s = [f_x]
+        for f_y in range(num_feat_sets):
+            if f_x == f_y:
+                continue
+            if set_corr[f_x, f_y] > 0.4:
+                s.append(f_y)
+        bind_sets.append(s)
+
     #Form graph where edges are correlation above threshold
     c_threshold = 0.4
     s_threshold = 0.4
@@ -199,8 +205,8 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
                 if c > c_threshold:
                     g_bind.add_edge(f_x, f_y)
     #Get lists of binded features
-    bind_sets = g_bind.connected_components()
-    bind_sets = [s for s in bind_sets if all(item in feat_sets_keep for item in s)]
+    # bind_sets = g_bind.connected_components()
+    # bind_sets = [s for s in bind_sets if all(item in feat_sets_keep for item in s)]
     bundle_sets = g_bundle.connected_components()
     bundle_sets = [s for s in bundle_sets if all(item in feat_sets_keep for item in s)]
     
@@ -244,7 +250,7 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
         for s in bind_sets:
             st = str(s) + "\n"
             file.write(st)
-        file.write("Bundle sets:\n")
+        file.write("\nBundle sets:\n")
         for s in bundle_sets:
             st = str(s) + "\n"
             file.write(st)
