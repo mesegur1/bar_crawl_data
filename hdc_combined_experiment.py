@@ -18,6 +18,7 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 import csv
 import getopt, sys
+import datetime
 
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
@@ -287,6 +288,8 @@ def run_train_and_test(
 if __name__ == "__main__":
     print("Using {} device".format(device))
     torch.set_default_tensor_type(torch.DoubleTensor)
+
+    print("Start time: ", datetime.datetime.now().strftime("%H:%M:%S"))
 
     # Remove 1st argument from the
     # list of command line arguments

@@ -106,7 +106,7 @@ def load_data(
     offset: int,
     window: int,
     window_step: int,
-    sample_rate: int = 20,
+    sample_rate: int = 40,
     test_ratio: float = 0.5,
 ):
     global accel_data_full
@@ -276,6 +276,10 @@ def accel_rms(xyz: np.ndarray):
     rms_z = librosa.feature.rms(y=z, frame_length=frame_length, center=False)
     return np.array([rms_x.item(), rms_y.item(), rms_z.item()]).flatten()
 
+def normalize(v : np.ndarray):
+    n = np.linalg.norm(v)
+    v = v / (n if n != 0 else 1)
+    return v
 
 def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
     x = xyz[:, 0]
@@ -294,7 +298,7 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
         hop_length=frame_length,
         center=False,
         htk=True,
-        power=1,
+        power=2,
     )
     mfcc_x = m_x
     m_y = librosa.feature.mfcc(
@@ -306,7 +310,7 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
         hop_length=frame_length,
         center=False,
         htk=True,
-        power=1,
+        power=2,
     )
     mfcc_y = m_y
     m_z = librosa.feature.mfcc(
@@ -318,18 +322,18 @@ def accel_mfcc_cov(xyz: np.ndarray, sample_rate: float):
         hop_length=frame_length,
         center=False,
         htk=True,
-        power=1,
+        power=2,
     )
     mfcc_z = m_z
 
     #Form covariance matrices and take upper triangle values
     indices = np.triu_indices(13, 0)
-    mfcc_cov_x = (mfcc_x @ mfcc_x.T)[indices]
-    mfcc_cov_y = (mfcc_y @ mfcc_y.T)[indices]
-    mfcc_cov_z = (mfcc_z @ mfcc_z.T)[indices]
-    mfcc_cov_xy = (mfcc_x @ mfcc_y.T)[indices]
-    mfcc_cov_xz = (mfcc_x @ mfcc_z.T)[indices]
-    mfcc_cov_yz = (mfcc_y @ mfcc_z.T)[indices]
+    mfcc_cov_x = normalize((mfcc_x @ mfcc_x.T)[indices])
+    mfcc_cov_y = normalize((mfcc_y @ mfcc_y.T)[indices])
+    mfcc_cov_z = normalize((mfcc_z @ mfcc_z.T)[indices])
+    mfcc_cov_xy = normalize((mfcc_x @ mfcc_y.T)[indices])
+    mfcc_cov_xz = normalize((mfcc_x @ mfcc_z.T)[indices])
+    mfcc_cov_yz = normalize((mfcc_y @ mfcc_z.T)[indices])
     
     mfcc_cov = np.concatenate(
         (mfcc_cov_x, mfcc_cov_y, mfcc_cov_z, mfcc_cov_xy, mfcc_cov_xz, mfcc_cov_yz),

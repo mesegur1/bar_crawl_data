@@ -124,9 +124,13 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
     min_tac_corr = np.min([corr.iat[0, f] for f in range(1, len(corr))])
     max_mfcc_tac_corr = np.max([corr.iat[0, f] for f in range(1, 1 + MFCC_FEAT_LENGTH)])
+    threshold = max_mfcc_tac_corr / 2
+    num_mfcc_tac_above_threshold = len([corr.iat[0, f] for f in range(1, 1 + MFCC_FEAT_LENGTH) if corr.iat[0, f] > threshold])
     print("Max correlation with TAC = %.5f" % max_tac_corr)
     print("Min correlation with TAC = %.5f" % min_tac_corr)
     print("Max correlation of MFCC features with TAC = %.5f" % max_mfcc_tac_corr)
+    print("Number of mfcc features with TAC correlation above %.3f = %d" % 
+          (threshold, num_mfcc_tac_above_threshold))
 
     print("Similarity matrix shape: ", corr.shape)
     max_tac_sim = np.max([sim[0, f] for f in range(1, len(sim))])
@@ -179,8 +183,8 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     feat_sets_keep = [i for i in range(num_feat_sets) if tac_corr[i] > 0]
 
     #Form graph where edges are correlation above threshold
-    c_threshold = 0.8
-    s_threshold = 0.5
+    c_threshold = 0.4
+    s_threshold = 0.4
     g_bind = Graph(num_feat_sets)
     g_bundle = Graph(num_feat_sets)
     for f_x in range(num_feat_sets):
@@ -222,6 +226,17 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
         file.write(s)
         for s in range(num_feat_sets):
             file.write(s2 % (s, s, feat_set_start_index(s), feat_set_end_index(s)))
+        file.write("\n\n\n")
+
+        file.write("MFCC set correlations:\n\n")
+        file.write(np.array2string(set_corr[:, :MFCC_COV_NUM]))
+        file.write("\n\n\n")
+
+        np.savetxt("data/mfcc_corr.csv", set_corr[:, :MFCC_COV_NUM], delimiter=",")
+        np.savetxt("data/corr.csv", set_corr, delimiter=",")
+
+        file.write("MFCC set similarites:\n\n")
+        file.write(np.array2string(set_sim[:, :MFCC_COV_NUM]))
         file.write("\n\n\n")
 
         file.write("\nBundled/bind schema\n\n")
