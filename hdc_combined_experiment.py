@@ -9,6 +9,7 @@ from encoders.HdcLevelEncoder import HdcLevelEncoder
 from encoders.HdcRbfEncoder import HdcRbfEncoder
 from encoders.HdcSinusoidNgramEncoder import HdcSinusoidNgramEncoder
 from encoders.HdcGenericEncoder import HdcGenericEncoder
+from encoders.HdcCNNEncoder import HdcCNNEncoder
 from data_combined_reader import load_combined_data
 import torchmetrics
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 import csv
 import getopt, sys
+import datetime
 
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
@@ -39,6 +41,7 @@ USE_LEVEL_ENCODER = 0
 USE_RBF_ENCODER = 1
 USE_SINUSOID_NGRAM_ENCODER = 2
 USE_GENERIC_ENCODER = 3
+USE_CNN_ENCODER = 4
 
 # Learning mode options
 USE_ADD = 0
@@ -58,6 +61,8 @@ def encoder_mode_str(mode: int):
         return "sinusoid-ngram"
     elif mode == USE_GENERIC_ENCODER:
         return "generic"
+    elif mode == USE_CNN_ENCODER:
+        return "cnn-hdc"
     else:
         return "unknown"
 
@@ -264,6 +269,8 @@ def run_train_and_test(
         encode = HdcSinusoidNgramEncoder(DIMENSIONS)
     elif encoder_option == USE_GENERIC_ENCODER:
         encode = HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
+    elif encoder_option == USE_CNN_ENCODER:
+        encode = HdcCNNEncoder(DIMENSIONS)
     encode = encode.to(device)
 
     # Run training
@@ -281,6 +288,8 @@ def run_train_and_test(
 if __name__ == "__main__":
     print("Using {} device".format(device))
     torch.set_default_tensor_type(torch.DoubleTensor)
+
+    print("Start time: ", datetime.datetime.now().strftime("%H:%M:%S"))
 
     # Remove 1st argument from the
     # list of command line arguments
@@ -310,6 +319,8 @@ if __name__ == "__main__":
                     encoder = USE_SINUSOID_NGRAM_ENCODER
                 elif currentValue == str(USE_GENERIC_ENCODER):
                     encoder = USE_GENERIC_ENCODER
+                elif currentValue == str(USE_CNN_ENCODER):
+                    encoder = USE_CNN_ENCODER
                 else:
                     encoder = USE_LEVEL_ENCODER
             elif currentArgument in ("-t", "--Epochs"):
