@@ -178,37 +178,52 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
     tac_corr = tac_corr / m3
     feat_sets_keep = [i for i in range(num_feat_sets) if tac_corr[i] > 0]
 
-    bind_sets = []
+    c_threshold = 0.8
+    corr_bind_sets = []
     for f_x in range(num_feat_sets):
-        s = [f_x]
-        for f_y in range(num_feat_sets):
-            if f_x == f_y:
-                continue
-            if set_corr[f_x, f_y] > 0.4:
-                s.append(f_y)
-        bind_sets.append(s)
+        if f_x in feat_sets_keep:
+            s = [f_x]
+            for f_y in range(num_feat_sets):
+                if f_y in feat_sets_keep:
+                    if f_x == f_y:
+                        continue
+                    if set_corr[f_x, f_y] > c_threshold:
+                        s.append(f_y)
+            corr_bind_sets.append(s)
 
-    #Form graph where edges are correlation above threshold
-    c_threshold = 0.4
-    s_threshold = 0.4
-    g_bind = Graph(num_feat_sets)
-    g_bundle = Graph(num_feat_sets)
+    s_threshold = 0.3
+    sim_bind_sets = []
     for f_x in range(num_feat_sets):
-        for f_y in range(num_feat_sets):
-            if f_x == f_y:
-                continue
-            c = set_corr[f_x, f_y]
-            s = set_sim[f_x, f_y]
-            if f_x in feat_sets_keep and f_y in feat_sets_keep:
-                if s > s_threshold:
-                    g_bundle.add_edge(f_x, f_y)
-                if c > c_threshold:
-                    g_bind.add_edge(f_x, f_y)
+        if f_x in feat_sets_keep:
+            s = [f_x]
+            for f_y in range(num_feat_sets):
+                if f_y in feat_sets_keep:
+                    if f_x == f_y:
+                        continue
+                    if set_sim[f_x, f_y] > s_threshold:
+                        s.append(f_y)
+            sim_bind_sets.append(s)
+
+    # #Form graph where edges are correlation above threshold
+    # s_threshold = 0.4
+    # g_bind = Graph(num_feat_sets)
+    # g_bundle = Graph(num_feat_sets)
+    # for f_x in range(num_feat_sets):
+    #     for f_y in range(num_feat_sets):
+    #         if f_x == f_y:
+    #             continue
+    #         c = set_corr[f_x, f_y]
+    #         s = set_sim[f_x, f_y]
+    #         if f_x in feat_sets_keep and f_y in feat_sets_keep:
+    #             if s > s_threshold:
+    #                 g_bundle.add_edge(f_x, f_y)
+    #             if c > c_threshold:
+    #                 g_bind.add_edge(f_x, f_y)
     #Get lists of binded features
     # bind_sets = g_bind.connected_components()
     # bind_sets = [s for s in bind_sets if all(item in feat_sets_keep for item in s)]
-    bundle_sets = g_bundle.connected_components()
-    bundle_sets = [s for s in bundle_sets if all(item in feat_sets_keep for item in s)]
+    # bundle_sets = g_bundle.connected_components()
+    # bundle_sets = [s for s in bundle_sets if all(item in feat_sets_keep for item in s)]
     
 
     print("Outputting bind/bundle schema to file")
@@ -245,15 +260,45 @@ def generate_code_stubs(corr : pd.DataFrame, sim : np.ndarray):
         file.write(np.array2string(set_sim[:, :MFCC_COV_NUM]))
         file.write("\n\n\n")
 
-        file.write("\nBundled/bind schema\n\n")
-        file.write("Bind sets:\n")
-        for s in bind_sets:
+        file.write("\n\n\nBundled/bind schema\n\n")
+        file.write("Bind sets using correlation:\n")
+        for s in corr_bind_sets:
             st = str(s) + "\n"
             file.write(st)
-        file.write("\nBundle sets:\n")
-        for s in bundle_sets:
+        file.write("\n\nBind sets using similarity:\n")
+        for s in sim_bind_sets:
             st = str(s) + "\n"
             file.write(st)
+
+        s1 = "\n\ncombined_hv = (sample_hv\n * (\n"
+        s2 = "feat_hvs[%d]"
+        s3 = "    )\n)\n"
+        file.write("\n\nBind with correlation:\n\n")
+        file.write(s1)
+        for b in corr_bind_sets:
+            file.write("    + (")
+            s4 = ""
+            for f in b:
+                s4 += s2 % (f)
+                s4 += " * "
+            s4 = s4.rstrip(" * ")
+            file.write(s4)
+            file.write(")\n")
+        file.write(s3)
+        file.write("\n\n\n")
+
+        file.write("Bind with similarity:\n\n")
+        file.write(s1)
+        for b in sim_bind_sets:
+            file.write("    + (")
+            s4 = ""
+            for f in b:
+                s4 += s2 % (f)
+                s4 += " * "
+            s4 = s4.rstrip(" * ")
+            file.write(s4)
+            file.write(")\n")
+        file.write(s3)
 
 
 if __name__ == "__main__":

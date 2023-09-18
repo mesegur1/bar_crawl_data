@@ -10,7 +10,6 @@ NGRAM_SIZE = 3
 MFCC_COV_FEAT_LENGTH = 91
 MFCC_COV_NUM = 6
 
-
 # HDC Encoder for Bar Crawl Data
 class HdcGenericEncoder(torch.nn.Module):
     def __init__(self, levels: int, out_dimension: int):
@@ -64,11 +63,6 @@ class HdcGenericEncoder(torch.nn.Module):
         feat_hvs[22] = self.feat_kernels[22](feat[594:597])
         feat_hvs[23] = self.feat_kernels[23](feat[597:600])
 
-        # (feat_hvs[6] + feat_hvs[13] + feat_hvs[21] + feat_hvs[22] + feat_hvs[23])
-        # * (feat_hvs[7] + feat_hvs[8] + feat_hvs[9] + feat_hvs[10] + feat_hvs[11])
-        # * (feat_hvs[12])
-        # * (feat_hvs[14] + feat_hvs[15] + feat_hvs[16] + feat_hvs[17] + feat_hvs[18] + feat_hvs[19] + feat_hvs[20])
-
         # 6 RMS_START = MFCC_START + NUM_FEAT_ITEMS_MFCC
         # 7 MEAN_START = RMS_START + NUM_FEAT_ITEMS_GENERAL
         # 8 MEDIAN_START = MEAN_START + NUM_FEAT_ITEMS_GENERAL
@@ -88,20 +82,17 @@ class HdcGenericEncoder(torch.nn.Module):
         # 22 KURTOSIS_START = SKEWNESS_START + NUM_FEAT_ITEMS_GENERAL
         # 23 AVG_POWER_START = KURTOSIS_START + NUM_FEAT_ITEMS_GENERAL
 
-
-        #Combine hypervectors
-        mfcc = (feat_hvs[0] * feat_hvs[1] * feat_hvs[2] * feat_hvs[3] * feat_hvs[4] * feat_hvs[5])
-        sample_w_feat = (sample_hv
-            * (
-                (feat_hvs[6]*mfcc + feat_hvs[21] + feat_hvs[23])
-                * (feat_hvs[9] + (feat_hvs[10] + feat_hvs[11])*mfcc)
-                * (feat_hvs[12] * mfcc)
-                * (feat_hvs[17] + feat_hvs[18])
-            )
+        combined_hv = (sample_hv
+            * (feat_hvs[6] + feat_hvs[21] + feat_hvs[23])
+            * (feat_hvs[9] + feat_hvs[10])
+            * (feat_hvs[11])
+            * (feat_hvs[12])
+            * (feat_hvs[17])
+            * (feat_hvs[18])
+            + sample_hv * (feat_hvs[6] + feat_hvs[10] + feat_hvs[11] + feat_hvs[12])
+            * (feat_hvs[0] * feat_hvs[1] * feat_hvs[2] * feat_hvs[3] * feat_hvs[4] * feat_hvs[5])
         )
-        #Next thing to try: restore sample_hv * feat binding, and add another 
-        #binding with just MFCC relevant features
 
         # Apply activation function
-        sample_w_feat = torchhd.hard_quantize(sample_w_feat)
-        return sample_w_feat.flatten()
+        combined_hv = torchhd.hard_quantize(combined_hv)
+        return combined_hv.flatten()
