@@ -154,8 +154,9 @@ def run_feature_engineering(acc_path):
             print("Store windows from pid...")
             dfs.append(ndf)
             rdfs.append(rdf)
-    return (pd.concat(dfs).reset_index().drop(columns=['level_0', 'index'], axis=1),
-            pd.concat(rdfs).reset_index().drop(columns=['index'], axis=1))
+    full_acc = pd.concat(dfs).reset_index().drop(columns=['level_0', 'index'], errors="ignore", axis=1)
+    raw_acc = pd.concat(rdfs).reset_index().drop(columns=['index'], errors="ignore", axis=1)
+    return (full_acc, raw_acc)
 
 
 # Joining target to features.
