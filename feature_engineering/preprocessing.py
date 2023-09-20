@@ -83,7 +83,6 @@ def preprocess_acc(path, new_path):
          # Create df with timestamps and readings.
         new_df = pd.DataFrame(readings, columns=["x", "y", "z"]).astype('float32')
         new_df['time'] = timestamps
-        new_df["time"] = new_df["time"].astype("datetime64[ms]")
         new_df['pid'] = current_pid
 	    # Print new df shape.
         print(f"New shape: {new_df.shape}")

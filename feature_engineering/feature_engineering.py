@@ -49,10 +49,16 @@ def add_mean_first3(w1_df, w10_df):
 
 # Windowing functions.
 def pivot_window_10s_from_ms_raw(df):
-    raw_df = df.resample("25L").last()
-    raw_df = raw_df.interpolate(method="linear")
-    raw_df['window10'] = np.floor(raw_df['time'] / 10000).astype(int)
-    raw_df = raw_df.groupby(['pid', 'window10'])[['x', 'y', 'z']].agg(lambda s: s.to_list())
+    #Resample to 40Hz
+    time_type = df["time"].dtype
+    df["time"] = df["time"].astype("datetime64[ms]")
+    df = df.set_index("time")
+    df = df.resample("25L").last()
+    df = df.interpolate(method="linear")
+    df["time"] = df.index.astype(time_type)
+    #Group by 10 seconds
+    df['window10'] = np.floor(df['time'] / 10000).astype(int)
+    raw_df = df.groupby(['pid', 'window10'])[['x', 'y', 'z']].agg(lambda s: s.to_list())
     return raw_df
 
 def pivot_window_10s_from_ms(df):
@@ -142,10 +148,11 @@ def run_feature_engineering(acc_path):
             print(filename)
             df = pd.read_pickle(acc_path + filename)
             print("Perform windowing...")
-            df = two_tier_windowing(df)
+            ndf = two_tier_windowing(df)
+            print("Performing windowing of raw data...")
             rdf = pivot_window_10s_from_ms_raw(df)
             print("Store windows from pid...")
-            dfs.append(df)
+            dfs.append(ndf)
             rdfs.append(rdf)
     return (pd.concat(dfs).reset_index().drop(columns=['level_0', 'index'], axis=1),
             pd.concat(rdfs).reset_index().drop(columns=['index'], axis=1))
