@@ -119,14 +119,15 @@ def load_data(
     tac_data = tac_data.set_index("time")
 
     # Get specific accelerometer data
-    accel_data_specific = accel_data_full.query("pid == @pid")
+    accel_data_specific = accel_data_full[(accel_data_full['pid'] == pid)]
     if pid == "JB3156" or pid == "CC6740":
         # skip first row (dummy data)
         accel_data_specific = accel_data_specific.iloc[1:-1]
-
-    start = tac_data.index.min()
-    stop = tac_data.index.max()
-    accel_data = accel_data_specific.query("@start <= index & @stop >= index")
+    accel_data_specific = accel_data_specific.drop("pid", axis=1)
+    
+    start = max(tac_data.index.min(), accel_data_specific.index.min())
+    stop = min(tac_data.index.max(), accel_data_specific.index.max())
+    accel_data = accel_data_specific[(accel_data_specific.index >= start) & (accel_data_specific.index <= stop)]
 
     # Down sample accelerometer data
     accel_data = accel_data_specific.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
@@ -134,8 +135,9 @@ def load_data(
 
     # Combine Data Frames to perform interpolation and backfilling
     input_data = accel_data.join(tac_data, how="outer")
-    input_data = input_data.apply(pd.Series.interpolate, args=("time",))
+    input_data = input_data.interpolate(method="linear")
     input_data = input_data.fillna(method="backfill")
+    input_data = input_data[(input_data.index >= start) & (input_data.index <= stop)]
 
     # Down sample data again
     input_data = input_data.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
@@ -735,7 +737,7 @@ def avg_stft_per_frame_s(x: np.ndarray):
         ),
         ref=np.max,
     )
-    return stft.mean(axis=1)
+    return stft.mean(axis=0)
 
 
 def avg_stft_per_frame(xyz: np.ndarray):
