@@ -52,13 +52,12 @@ def load_combined_data(pids: list):
 
 if __name__ == "__main__":
     path = "data/"
-    # new_path = "preprocessed_data/"
-    # print("Reading in all data")
-    # pre.preprocess_acc(path, new_path)
+    new_path = "preprocessed_data/"
+    print("Reading in all data")
+    #pre.preprocess_acc(path, new_path)
     
     print("Running feature engineering...")
-    acc_path = "preprocessed_data/"
-    full_acc, raw_acc = fe.run_feature_engineering(acc_path)
+    full_acc, raw_acc = fe.run_feature_engineering(new_path)
     
     print("Read in TAC...")
     tac = pre.preprocess_tac(path + "clean_tac/")
@@ -68,5 +67,5 @@ if __name__ == "__main__":
     print("Merging dataframes...")
     merged = fe.reconcile_acc_tac(full_acc, raw_acc, tac)
     
-    with open("%s/merged.pkl" % acc_path, "wb") as file:
+    with open("%s/merged.pkl" % new_path, "wb") as file:
         pickle.dump(merged, file)
