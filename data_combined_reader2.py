@@ -7,6 +7,9 @@ from sklearn.model_selection import train_test_split
 import feature_engineering.eda as eda
 import feature_engineering.feature_engineering as fe
 import feature_engineering.preprocessing as pre
+from tqdm import tqdm
+
+tqdm.pandas()
 
 TAC_LEVEL_0 = 0  # < 0.080 g/dl
 TAC_LEVEL_1 = 1  # >= 0.080 g/dl
@@ -25,15 +28,27 @@ MOTION_EPSILON = 0.0001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Define a function to convert row to numpy matrix
+def convert_to_window(row):
+    return np.array([c for c in row]).T
+
 def split_dataset(dataset, seed=1):
     """
-    Split dataset into train (70%), validation (15%), test (15%).
+    Split dataset into train (70%), test (30%).
     """
-    X = dataset.drop(columns=['pid', 'window10', 'timestamp', 'intoxicated'], axis=1)
-    y = dataset[['intoxicated']]
-    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.3, random_state=seed)
-    valid_X, test_X, valid_y, test_y = train_test_split(test_X, test_y, test_size=0.5, random_state=seed)
-    return train_X, valid_X, test_X, train_y, valid_y, test_y
+    raw_X = dataset[['time', 'x', 'y', 'z']]
+    raw_X = raw_X.apply(lambda row: convert_to_window(row), axis=1).to_numpy()
+    X = dataset.drop(columns=['pid', 'window10', 'timestamp', 'time', 'x', 'y', 'z', 'intoxicated'], axis=1).to_numpy()
+    y = dataset[['intoxicated']].to_numpy()
+    
+    train_raw_X, test_raw_X, train_X, test_X, train_y, test_y = train_test_split(raw_X, X, y, test_size=0.3, random_state=seed)
+    train_length = len(train_raw_X)
+    test_length = len(test_raw_X)
+    train_set = list(zip(train_raw_X, train_X, train_y))
+    print("Number of Windows For Training: %d" % (train_length))
+    test_set = list(zip(test_raw_X, test_X, test_y))
+    print("Number of Windows For Testing: %d" % (test_length))
+    return (train_set, test_set)
 
 
 def load_combined_data(pids: list):
@@ -42,12 +57,9 @@ def load_combined_data(pids: list):
     with open("%s/merged.pkl" % acc_path, "rb") as file:
         merged = pickle.load(file)
     
-    train_X, valid_X, test_X, train_y, valid_y, test_y = split_dataset(merged)
+    train_set, test_set = split_dataset(merged)
     
-    train_data_set = list(zip(train_X, train_y))
-    test_data_set = list(zip(test_X, test_y))
-    
-    return (WINDOW, train_data_set, test_data_set)
+    return (WINDOW, train_set, test_set)
 
 
 if __name__ == "__main__":
@@ -66,6 +78,6 @@ if __name__ == "__main__":
     # Join target onto features.
     print("Merging dataframes...")
     merged = fe.reconcile_acc_tac(full_acc, raw_acc, tac)
-    
+    merged_path = "merged_data/"
     with open("%s/merged.pkl" % new_path, "wb") as file:
         pickle.dump(merged, file)

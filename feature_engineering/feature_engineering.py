@@ -58,7 +58,7 @@ def pivot_window_10s_from_ms_raw(df):
     df["time"] = df.index.astype(time_type)
     #Group by 10 seconds
     df['window10'] = np.floor(df['time'] / 10000).astype(int)
-    raw_df = df.groupby(['pid', 'window10'])[['x', 'y', 'z']].agg(lambda s: s.to_list())
+    raw_df = df.groupby(['pid', 'window10'])[['time', 'x', 'y', 'z']].agg(lambda s: s.to_list())
     return raw_df
 
 def pivot_window_10s_from_ms(df):
