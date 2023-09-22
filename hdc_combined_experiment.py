@@ -10,7 +10,7 @@ from encoders.HdcRbfEncoder import HdcRbfEncoder
 from encoders.HdcSinusoidNgramEncoder import HdcSinusoidNgramEncoder
 from encoders.HdcGenericEncoder import HdcGenericEncoder
 from encoders.HdcCNNEncoder import HdcCNNEncoder
-from data_combined_reader import load_combined_data
+from data_combined_reader2 import load_combined_data
 import torchmetrics
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
