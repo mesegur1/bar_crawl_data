@@ -34,14 +34,14 @@ def convert_to_window(row):
 
 def split_dataset(dataset, seed=1):
     """
-    Split dataset into train (70%), test (30%).
+    Split dataset into train (75%), test (25%).
     """
     raw_X = dataset[['time', 'x', 'y', 'z']]
     raw_X = raw_X.progress_apply(lambda row: convert_to_window(row), axis=1).to_numpy()
     X = dataset.drop(columns=['pid', 'window10', 'timestamp', 'time', 'x', 'y', 'z', 'intoxicated'], axis=1).to_numpy()
     y = dataset[['intoxicated']].to_numpy().flatten()
 
-    train_raw_X, test_raw_X, train_X, test_X, train_y, test_y = train_test_split(raw_X, X, y, test_size=0.3, random_state=seed)
+    train_raw_X, test_raw_X, train_X, test_X, train_y, test_y = train_test_split(raw_X, X, y, test_size=0.25, random_state=seed)
     train_length = len(train_raw_X)
     test_length = len(test_raw_X)
     train_set = list(zip(train_raw_X, train_X, train_y))

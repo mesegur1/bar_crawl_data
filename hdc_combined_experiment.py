@@ -188,6 +188,35 @@ def run_train(
                     label_tensor = label_tensor.unsqueeze(0)
                     model.add_adjust_iterative(input_hypervector, label_tensor, lr=lr)
 
+def run_train_acc(model: models.Centroid, encode: torch.nn.Module):
+    print("Begin train accuracy calculation")
+    accuracy = torchmetrics.Accuracy(
+        "multiclass",
+        num_classes=NUM_TAC_LEVELS,
+    )
+    accuracy = accuracy.to(device)
+    with torch.no_grad():
+        y_true = []
+        preds = []
+        for x, f, y in tqdm(train_data_set):
+            query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+            query_feat_tensor = torch.tensor(
+                f, dtype=torch.float64, device=device
+            )
+            query_hypervector = encode(query_tensor, query_feat_tensor)
+            output = model(query_hypervector, dot=False)
+            y_pred = torch.argmax(output).unsqueeze(0).to(device)
+            label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
+            label_tensor = label_tensor.unsqueeze(0)
+            accuracy.update(y_pred, label_tensor)
+            preds.append(y_pred.item())
+            y_true.append(label_tensor.item())
+
+    print(f"Training accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
+    f1 = f1_score(y_true, preds, zero_division=0)
+    print(f"Training F1 Score of model is {(f1):.3f}")
+
+    return (accuracy.compute().item() * 100, f1)
 
 def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool = True):
     # Test using test set half
@@ -276,13 +305,16 @@ def run_train_and_test(
     # Run training
     run_train(model, encode, learning_mode, train_epochs, lr)
 
-    print("Normalizing model")
-    model.normalize()
+    # print("Normalizing model")
+    # model.normalize()
+
+    # Run Train Accuracy
+    train_accuracy = run_train_acc(model, encode)
 
     # Run Testing
     accuracy = run_test(model, encode)
 
-    return accuracy
+    return (accuracy, train_accuracy)
 
 
 if __name__ == "__main__":
@@ -366,8 +398,9 @@ if __name__ == "__main__":
             newline="",
         ) as file:
             writer = csv.writer(file)
-            accuracy, f1 = run_train_and_test(encoder, lmode, train_epochs, lr)
+            (accuracy, f1), (train_accuracy, train_f1) = run_train_and_test(encoder, lmode, train_epochs, lr)
             writer.writerow([accuracy, f1])
+            writer.writerow([train_accuracy, train_f1])
             file.flush()
             file.close()
         print("All tests done")
