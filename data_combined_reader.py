@@ -26,7 +26,7 @@ START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 40  # Hz
-TEST_RATIO = 0.25
+TEST_RATIO = 0.3
 MOTION_EPSILON = 0.0001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,9 +88,12 @@ def load_combined_data(pids: list):
             train_data_set.append(d)
         for d in test_set:
             test_data_set.append(d)
-    print("Randomly shuffle windows")
-    random.shuffle(train_data_set)
-    random.shuffle(test_data_set)
+    print("Sorting windows by timestamp")
+    train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
+    test_data_set = sorted(test_data_set, key=lambda x : x[0][0][0])
+    # print("Randomly shuffle windows")
+    # random.shuffle(train_data_set)
+    # random.shuffle(test_data_set)
 
     window = WINDOW
     with open("data/window_size.pkl", "rb") as file:
@@ -193,7 +196,7 @@ def load_data(
         data_feat_w,
         data_tac_w,
         test_size=test_ratio,
-        shuffle=True,
+        shuffle=False,
     )
     train_length = len(train_data_accel)
     test_length = len(test_data_accel)
