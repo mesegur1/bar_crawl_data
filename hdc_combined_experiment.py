@@ -23,7 +23,7 @@ import datetime
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
 DIMENSIONS = 10000
-NUM_SIGNAL_LEVELS = 200
+NUM_SIGNAL_LEVELS = 1000
 NUM_TAC_LEVELS = 2
 DEFAULT_LEARNING_RATE = 0.005
 DEFAULT_TRAINING_EPOCHS = 1
@@ -31,6 +31,7 @@ DISTHD_ALPHA = 4
 DISTHD_BETA = 2
 DISTHD_THETA = 1
 DISTHD_R = 0.05
+TEST_RATIO = 0.3
 
 # Data windowing settings (this is actually read from PKL data files,
 # but we provide a default here)
@@ -113,12 +114,13 @@ PIDS1 = [
 
 
 # Load all data for each pid
-def load_all_pid_data():
+def load_all_pid_data(test_ratio : float):
     global train_data_set
     global test_data_set
     global window
 
-    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2)
+    print("Test ratio: %f" % test_ratio)
+    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2, test_ratio)
 
 
 # Run train for a given pid, with provided model and encoder
@@ -296,10 +298,10 @@ if __name__ == "__main__":
     argumentList = sys.argv[1:]
 
     # Options
-    options = "e:t:m:l:"
+    options = "e:t:m:l:r:"
 
     # Long options
-    long_options = ["Encoder=", "Epochs=", "LearningMode=", "LearningRate="]
+    long_options = ["Encoder=", "Epochs=", "LearningMode=", "LearningRate=", "TestRatio="]
 
     try:
         # Parsing argument
@@ -308,6 +310,7 @@ if __name__ == "__main__":
         train_epochs = DEFAULT_TRAINING_EPOCHS
         lmode = USE_ADD
         lr = DEFAULT_LEARNING_RATE
+        test_ratio = TEST_RATIO
         # Checking each argument
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
@@ -351,17 +354,22 @@ if __name__ == "__main__":
                     lr = DEFAULT_LEARNING_RATE
                 if lr < 0:
                     lr = DEFAULT_LEARNING_RATE
+            elif currentArgument in ("-r", "--TestRatio"):
+                try:
+                    test_ratio = float(currentValue)
+                except ValueError:
+                    print("Defaulting test ratio to %.5f" % TEST_RATIO)
 
         print(
             "Multi-PID-Tests for %s encoder and %s learning mode, with %d train epochs, learning mode, and lr=%.5f"
             % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr)
         )
         # Load datasets in windowed format
-        load_all_pid_data()
+        load_all_pid_data(test_ratio)
 
         with open(
-            "results/hdc_output_combined_%s_%s_%d_%.5f.csv"
-            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr),
+            "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio),
             "w",
             newline="",
         ) as file:

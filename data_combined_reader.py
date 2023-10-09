@@ -21,12 +21,11 @@ MS_PER_SEC = 1000
 
 # Data windowing settings
 WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per window
-WINDOW_STEP = 360  # 8 second step: 9 seconds * 40Hz = 360 samples per step
+WINDOW_STEP = 400  # 10 second step: 10 seconds * 40Hz = 400 samples per step
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 40  # Hz
-TEST_RATIO = 0.3
 MOTION_EPSILON = 0.0001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,26 +73,31 @@ def load_accel_data_full():
     accel_data_full = accel_data_full.set_index("time")
 
 
-def load_combined_data(pids: list):
+def load_combined_data(pids: list, test_ratio: float = 0.3):
     train_data_set = []
     test_data_set = []
     print("Reading in all data")
     for pid in pids:
         # Load from PKLs
-        with open("data/%s_random_train_set.pkl" % pid, "rb") as file:
-            train_set = pickle.load(file)
-        with open("data/%s_random_test_set.pkl" % pid, "rb") as file:
-            test_set = pickle.load(file)
-        for d in train_set:
+        with open("data/%s_random_data_set.pkl" % pid, "rb") as file:
+            data = pickle.load(file)
+        (
+            train_data,
+            test_data,
+        ) = train_test_split(
+            data,
+            test_size=test_ratio,
+            shuffle=False,
+        )
+        for d in train_data:
             train_data_set.append(d)
-        for d in test_set:
+        for d in test_data:
             test_data_set.append(d)
     print("Sorting windows by timestamp")
     train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
     test_data_set = sorted(test_data_set, key=lambda x : x[0][0][0])
-    # print("Randomly shuffle windows")
-    # random.shuffle(train_data_set)
-    # random.shuffle(test_data_set)
+    print("Number of Windows for Training: %d" % (len(train_data_set)))
+    print("Number of Windows for Testing: %d" % (len(test_data_set)))
 
     window = WINDOW
     with open("data/window_size.pkl", "rb") as file:
@@ -109,8 +113,7 @@ def load_data(
     offset: int,
     window: int,
     window_step: int,
-    sample_rate: int = 40,
-    test_ratio: float = 0.5,
+    sample_rate: int = 40
 ):
     global accel_data_full
     print("Reading in Data for person %s" % (pid))
@@ -182,35 +185,13 @@ def load_data(
 
         prev_accel_w = accel_w
 
-    print("Creating data sets")
-    # Split data into two parts
-    (
-        train_data_accel,
-        test_data_accel,
-        train_data_feat,
-        test_data_feat,
-        train_data_tac,
-        test_data_tac,
-    ) = train_test_split(
-        data_accel_w,
-        data_feat_w,
-        data_tac_w,
-        test_size=test_ratio,
-        shuffle=False,
-    )
-    train_length = len(train_data_accel)
-    test_length = len(test_data_accel)
+    print("Creating data set")
+    data_set = list(zip(data_accel_w, data_feat_w, data_tac_w))
+    print("Number of Windows: %d" % (len(data_set)))
 
-    train_set = list(zip(train_data_accel, train_data_feat, train_data_tac))
-    print("Number of Windows For Training: %d" % (train_length))
-    test_set = list(zip(test_data_accel, test_data_feat, test_data_tac))
-    print("Number of Windows For Testing: %d" % (test_length))
+    with open("data/%s_random_data_set.pkl" % pid, "wb") as file:
+        pickle.dump(data_set, file)
 
-    with open("data/%s_random_train_set.pkl" % pid, "wb") as file:
-        pickle.dump(train_set, file)
-
-    with open("data/%s_random_test_set.pkl" % pid, "wb") as file:
-        pickle.dump(test_set, file)
 
 
 def is_greater_than(x: torch.Tensor, eps: float):
@@ -814,7 +795,7 @@ if __name__ == "__main__":
     for pid in PIDS:
         # Load data from CSVs
         load_data(
-            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE, TEST_RATIO
+            pid, END_INDEX, START_OFFSET, WINDOW, WINDOW_STEP, SAMPLE_RATE
         )
 
     with open("data/window_size.pkl", "wb") as file:
