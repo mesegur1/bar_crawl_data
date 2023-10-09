@@ -73,7 +73,7 @@ def load_accel_data_full():
     accel_data_full = accel_data_full.set_index("time")
 
 
-def load_combined_data(pids: list, test_ratio: float = 0.3):
+def load_combined_data(pids: list, test_ratio: float = 0.3, shuffle_w: bool = False):
     train_data_set = []
     test_data_set = []
     print("Reading in all data")
@@ -87,15 +87,20 @@ def load_combined_data(pids: list, test_ratio: float = 0.3):
         ) = train_test_split(
             data,
             test_size=test_ratio,
-            shuffle=False,
+            shuffle=shuffle_w,
         )
         for d in train_data:
             train_data_set.append(d)
         for d in test_data:
             test_data_set.append(d)
-    print("Sorting windows by timestamp")
-    train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
-    test_data_set = sorted(test_data_set, key=lambda x : x[0][0][0])
+    if not shuffle_w:
+        print("Sorting windows by timestamp")
+        train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
+        test_data_set = sorted(test_data_set, key=lambda x : x[0][0][0])
+    else:
+        print("Shuffling windows randomly")
+        random.shuffle(train_data_set)
+        random.shuffle(test_data_set)
     print("Number of Windows for Training: %d" % (len(train_data_set)))
     print("Number of Windows for Testing: %d" % (len(test_data_set)))
 

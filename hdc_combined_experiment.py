@@ -114,13 +114,13 @@ PIDS1 = [
 
 
 # Load all data for each pid
-def load_all_pid_data(test_ratio : float):
+def load_all_pid_data(test_ratio : float, shuffle_w: bool):
     global train_data_set
     global test_data_set
     global window
 
     print("Test ratio: %f" % test_ratio)
-    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2, test_ratio)
+    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2, test_ratio, shuffle_w)
 
 
 # Run train for a given pid, with provided model and encoder
@@ -298,10 +298,10 @@ if __name__ == "__main__":
     argumentList = sys.argv[1:]
 
     # Options
-    options = "e:t:m:l:r:"
+    options = "e:t:m:l:r:s"
 
     # Long options
-    long_options = ["Encoder=", "Epochs=", "LearningMode=", "LearningRate=", "TestRatio="]
+    long_options = ["Encoder=", "Epochs=", "LearningMode=", "LearningRate=", "TestRatio=", "ShuffleWindows"]
 
     try:
         # Parsing argument
@@ -311,6 +311,7 @@ if __name__ == "__main__":
         lmode = USE_ADD
         lr = DEFAULT_LEARNING_RATE
         test_ratio = TEST_RATIO
+        shuffle_w = False
         # Checking each argument
         for currentArgument, currentValue in arguments:
             if currentArgument in ("-e", "--Encoder"):
@@ -359,13 +360,17 @@ if __name__ == "__main__":
                     test_ratio = float(currentValue)
                 except ValueError:
                     print("Defaulting test ratio to %.5f" % TEST_RATIO)
+            elif currentArgument in ("-s", "--ShuffleWindows"):
+                shuffle_w = True
 
         print(
             "Multi-PID-Tests for %s encoder and %s learning mode, with %d train epochs, learning mode, and lr=%.5f"
             % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr)
         )
+        if shuffle_w:
+            print("Window shuffling option selected")
         # Load datasets in windowed format
-        load_all_pid_data(test_ratio)
+        load_all_pid_data(test_ratio, shuffle_w)
 
         with open(
             "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f.csv"
