@@ -1,0 +1,28 @@
+Kept features: 
+558, 582, 554, 552, 93, 555, 580, 571, 574, 578, 566, 287, 556, 550, 14, 551, 64, 581, 
+Corr schema (10 sets): 
+[14, 287]
+[64]
+[93, 574, 580, 582, 555, 556, 581]
+[550]
+[551, 554]
+[552]
+[558]
+[566]
+[571]
+[578]
+
+
+
+* (feat_hvs[14] + feat_hvs[287])
+* (feat_hvs[64])
+* (feat_hvs[93] + feat_hvs[574] + feat_hvs[580] + feat_hvs[582] + feat_hvs[555] + feat_hvs[556] + feat_hvs[581])
+* (feat_hvs[550])
+* (feat_hvs[551] + feat_hvs[554])
+* (feat_hvs[552])
+* (feat_hvs[558])
+* (feat_hvs[566])
+* (feat_hvs[571])
+* (feat_hvs[578])
+
+

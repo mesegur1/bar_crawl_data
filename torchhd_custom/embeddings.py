@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn.parameter import Parameter
 
-import torchhd.functional as functional
+import torchhd_custom.functional as functional
 from torchhd.tensors.base import VSATensor
 from torchhd.tensors.map import MAPTensor
 from torchhd.types import VSAOptions

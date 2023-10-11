@@ -4,13 +4,35 @@ ML experiments (using HDC) with the Bar Crawl Dataset from "Bar Crawl: Detecting
 ## Test Conditions Recreated
 1. 40Hz sampling
 2. 10 second windows
-3. Random shuffling of windows
-4. Split shuffled data 75/25 train and test
-5. Use few of the same metrics, in addition to raw accelerometer data
-    1. Root mean square
-    2. Mel-frequency cepstrum covariance
-    3. Mean, max, variance (time/frequency domains) for each axis
-    4. Note: Original study did not use raw accelerometer data directly
+3. (Optional) Random shuffling of windows
+4. (Can be configured) Split shuffled data 75/25 train and test
+5. Use many of same metrics, in addition to raw accelerometer data
+    0. MFCC XX (91 feat)
+    1. MFCC YY (91 feat)
+    2. MFCC ZZ (91 feat)
+    3. MFCC XY (91 feat)
+    4. MFCC XZ (91 feat)
+    5. MFCC YZ (91 feat)
+    6. RMS (3 feat)
+    7. MEAN (3 feat)
+    8. MEDIAN (3 feat)
+    9. STD (3 feat)
+    10. ABS MAX (3 feat)
+    11. ABS MIN (3 feat)
+    12. FFT MAX (3 feat) 
+    13. ZERO CROSS RATE (3 feat) 
+    14. SPECTRAL ENTROPY (3 feat)
+    15. SPECTRAL ENTROPY FFT (3 feat)
+    16. SPECTRAL CENTROID (3 feat)
+    17. SPECTRAL SPREAD (3 feat)
+    18. SPECTRAL FLUX (3 feat)
+    19. SPECTRAL ROLLOFF (3 feat)
+    20. SPECTRAL PEAK RATIO (3 feat)
+    21. SKEWNESS (3 feat)
+    22. KURTOSIS (3 feat)
+    23. AVG POWER (3 feat)
+    
+    Note: Original study did not use raw accelerometer data directly
 
 
 ## HDC Encoders Used
@@ -48,7 +70,7 @@ The following were used with Python 3.10:
 ## Run Instructions
 1. To run a HDC experiment, run
 ```bash
-python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4, 5> -t <epochs> -l <learning rate>
+python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4, 5> -t <epochs> -l <learning rate> -r <test ratio> -s <shuffle windows>
 ```
 
 -e : encoder choice (0: level, 1: rbf, 2: sinusoid/ngram, 3: generic)
@@ -58,6 +80,10 @@ python ./hdc_combined_experiment.py -e <0, 1, 2, 3> -m <0, 1, 2, 3, 4, 5> -t <ep
 -t : training epochs
 
 -l : learning rate for HDC model
+
+-r : test ratio for data
+
+-s : (optional) randomly shuffle windows
 
 ## Dataset Recreation Instructions
 1. To recreate the PKL dataset files (new sorting), place the accelerometer 

@@ -3,10 +3,6 @@ import pandas as pd
 import pickle
 from tqdm import tqdm
 
-MFCC_COV_FEAT_LENGTH = 91
-MFCC_COV_NUM = 6
-MFCC_FEAT_LENGTH = MFCC_COV_FEAT_LENGTH * MFCC_COV_NUM
-
 PIDS = [
     "BK7610",
     "BU4707",
@@ -48,7 +44,7 @@ class Graph:
     def add_edge(self, v, w):
         self.adj[v].append(w)
         self.adj[w].append(v)
- 
+
     # Method to retrieve connected components
     # in an undirected graph
     def connected_components(self):
@@ -64,9 +60,9 @@ class Graph:
 
 def load_pid_data(pid : str):
     global df
-    with open("data/%s_random_train_set.pkl" % pid, "rb") as file:
-        train_set = pickle.load(file)
-        for _, f, y in tqdm(train_set):
+    with open("data/%s_random_data_set.pkl" % pid, "rb") as file:
+        data_set = pickle.load(file)
+        for _, f, y in tqdm(data_set):
             #Create row of data frame
             row = {}
             row[0] = y #Label
@@ -83,49 +79,49 @@ def calculate_avg_corr():
 
     return corr
 
-def which_feat_set(i : int):
-    return (i - MFCC_FEAT_LENGTH - 1) // 3
-
-def feat_set_start_index(i : int):
-    return i*3 + MFCC_FEAT_LENGTH
-
-def which_mfcc_feat_set(i : int):
-    return (i - 1) // MFCC_COV_FEAT_LENGTH
-
-def mfcc_feat_set_start_index(i : int):
-    return i * MFCC_COV_FEAT_LENGTH
 
 def generate_code_stubs(corr : pd.DataFrame):
+    #These features are not offset by added TAC column
+    important_feat = [558, 582, 554, 552, 93, 555, 580, 571, 574, 578, 566, 287, 556, 550, 14, 551, 64, 581]
+    print("Important features used: ", important_feat)
     print("Correlation matrix shape: ", corr.shape)
-    max_tac_corr = np.max([corr.iat[0, f] for f in range(1, len(corr))])
-    min_tac_corr = np.min([corr.iat[0, f] for f in range(1, len(corr))])
-    max_mfcc_tac_corr = np.max([corr.iat[0, f] for f in range(1, 1 + MFCC_FEAT_LENGTH)])
+    max_tac_corr = np.max([corr.iat[0, f+1] for f in important_feat])
+    min_tac_corr = np.min([corr.iat[0, f+1] for f in important_feat])
     print("Max correlation with TAC = %.5f" % max_tac_corr)
     print("Min correlation with TAC = %.5f" % min_tac_corr)
-    print("Max correlation of MFCC features with TAC = %.5f" % max_mfcc_tac_corr)
 
-    #Choose what features to keep for consideration
-    keep = {}
-    for f in range(1, len(corr)):
-        c = corr.iat[0, f]
-        if c > 0:
-            keep[f] = c
-    feat = sorted(keep.items(), key=lambda item : item[1], reverse=True)
-    feat = sorted(feat)
+    threshold = 0.7
+    g = Graph(len(corr)-1) #Subtract added TAC column
+    for f_x in important_feat:
+        for f_y in important_feat:
+            if f_x == f_y:
+                continue
+            c = corr.iat[f_x + 1, f_y + 1] #Offset by 1 in corr matrix
+            if c > threshold:
+                g.add_edge(f_x, f_y)
+    #Get lists of binded features
+    corr_sets = g.connected_components()
+    corr_sets = [s for s in corr_sets if s[0] in important_feat]
 
+    print("Outputting correlated feature groups to file")
+    with open("data/feature_corr_schema.txt", "w") as file:
+        file.write("Kept features: \n")
+        for k in important_feat:
+            file.write("%d, " % k)        
+        file.write("\nCorr schema (%d sets): \n" % len(corr_sets))
+        for s in corr_sets:
+            st = str(s) + "\n"
+            file.write(st)
 
-    print("Generating code stubs")
-    with open("data/feature_code_stubs.txt", "w") as file:
-        file.write("self.feat_levels = embeddings.Level(200, out_dimension, dtype=torch.float64)")
         file.write("\n\n\n")
-
-        file.write("corr_feat = feat[[")
-        for f in feat:
-            file.write(("%d, " % f[0]))
-        file.write("]]\n")
-        s = "feat_hvs = self.feat_levels(corr_feat)\n"
-        file.write(s)
-        file.write("\n\n\n")
+        for s in corr_sets:
+            s3 = "* ("
+            for e in s:
+                s3 += "feat_hvs[%d] + " % e
+            s3 = s3.rstrip(" + ")
+            s3 += ")\n"
+            file.write(s3)
+        file.write(")\n\n\n")
 
 
 if __name__ == "__main__":
@@ -145,4 +141,3 @@ if __name__ == "__main__":
         with open("data/correlations.pkl", "wb") as file2:
             pickle.dump(corr, file2)
     generate_code_stubs(corr)
-    
