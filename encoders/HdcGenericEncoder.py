@@ -12,18 +12,19 @@ MFCC_COV_NUM = 6
 
 # HDC Encoder for Bar Crawl Data
 class HdcGenericEncoder(torch.nn.Module):
-    def __init__(self, levels: int, out_dimension: int):
+    def __init__(self, levels: int, out_dimension: int, device : str = "cpu"):
         super(HdcGenericEncoder, self).__init__()
 
         #Embeddings for raw data
         self.keys = embeddings.Random(NUM_CHANNEL, out_dimension, dtype=torch.float64)
         self.embed = embeddings.Level(levels, out_dimension, dtype=torch.float64)
+        self.device = device
 
         #Embeddings for extracted feature data
         #self.feat_emb = embeddings.DensityFlocet(18, out_dimension, dtype=torch.float64)
         self.feat_emb = {}
         for i in range(18):
-            self.feat_emb[i] = embeddings.Sinusoid(1, out_dimension, dtype=torch.float64, device="cuda")
+            self.feat_emb[i] = embeddings.Sinusoid(1, out_dimension, dtype=torch.float64, device=self.device)
 
     # Encode window of raw features (t,x,y,z) and extracted feature vectors (f,)
     def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:

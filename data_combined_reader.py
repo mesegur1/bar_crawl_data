@@ -77,6 +77,7 @@ def load_combined_data(pids: list, test_ratio: float = 0.3, shuffle_w: bool = Fa
     train_data_set = []
     test_data_set = []
     print("Reading in all data")
+    print("Shuffle window data?:", shuffle_w)
     for pid in pids:
         # Load from PKLs
         with open("data/%s_random_data_set.pkl" % pid, "rb") as file:

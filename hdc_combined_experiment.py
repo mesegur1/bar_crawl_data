@@ -264,16 +264,16 @@ def run_train_and_test(
         )
     # Create Encoder module
     if encoder_option == USE_LEVEL_ENCODER:
-        encode = HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS)
+        encode = HdcLevelEncoder(NUM_SIGNAL_LEVELS, window, DIMENSIONS, device)
     elif encoder_option == USE_RBF_ENCODER:
-        encode = HdcRbfEncoder(window, DIMENSIONS, USE_BACKPROPAGATION)
+        encode = HdcRbfEncoder(window, DIMENSIONS, USE_BACKPROPAGATION, device)
     elif encoder_option == USE_SINUSOID_NGRAM_ENCODER:
-        encode = HdcSinusoidNgramEncoder(DIMENSIONS)
+        encode = HdcSinusoidNgramEncoder(DIMENSIONS, device)
     elif encoder_option == USE_GENERIC_ENCODER:
-        encode = HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS)
+        encode = HdcGenericEncoder(NUM_SIGNAL_LEVELS, DIMENSIONS, device)
     elif encoder_option == USE_CNN_ENCODER:
-        encode = HdcCNNEncoder(DIMENSIONS)
-    encode = encode.to(device)
+        encode = HdcCNNEncoder(DIMENSIONS, device)
+    encode.to(device)
 
     # Run training
     run_train(model, encode, learning_mode, train_epochs, lr)
