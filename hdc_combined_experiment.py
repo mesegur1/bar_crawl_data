@@ -174,6 +174,8 @@ def run_train(
                         file.flush()
                     if learning_mode == USE_DISTHD:
                         model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
+                    if learning_mode == USE_NEURALHD:
+                        model.neural_regenerate((DISTHD_R * DIMENSIONS), encode, device)
             file.close()
     else:
         with torch.no_grad():
@@ -246,7 +248,7 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
     f1 = f1_score(y_true, preds, zero_division=0)
     print(f"Testing F1 Score of model is {(f1):.3f}")
-    return (accuracy.compute().item() * 100, f1)
+    return (accuracy.compute().item() * 100, f1, y_true, preds)
 
 
 # Run a test
@@ -372,15 +374,28 @@ if __name__ == "__main__":
         # Load datasets in windowed format
         load_all_pid_data(test_ratio, shuffle_w)
 
+        accuracy, f1, y_true, preds = run_train_and_test(encoder, lmode, train_epochs, lr)
+
+        shuffle_string = ("shuffle" if shuffle_w else "ordered")
         with open(
-            "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f.csv"
-            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio),
+            "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f_%s.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio, shuffle_string),
             "w",
             newline="",
         ) as file:
             writer = csv.writer(file)
-            accuracy, f1 = run_train_and_test(encoder, lmode, train_epochs, lr)
             writer.writerow([accuracy, f1])
+            file.flush()
+            file.close()
+        with open(
+            "data/labels_vs_pred_%s_%s_%d_%.5f_test_ratio_%.5f_%s.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio, shuffle_string),
+            "w",
+            newline="",
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerow(y_true)
+            writer.writerow(preds)
             file.flush()
             file.close()
         print("All tests done")

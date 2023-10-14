@@ -152,6 +152,7 @@ def load_data(
     # Down sample data again
     input_data = input_data.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
     input_data = input_data.interpolate(method="linear")
+    input_data = input_data.fillna(method="backfill")
 
     input_data["time"] = input_data.index
     input_data["time"] = input_data["time"].astype("int64")
@@ -180,7 +181,7 @@ def load_data(
     for base in tqdm(range(0, len(accel_data), window_step)):
         accel_w = accel_data[base : base + window]
         # Check for zeroed windows
-        if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] > 2:
+        if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] == window:
             #Compute TAC and extracted features
             tac_w = stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
             feat_w = feature_extraction(accel_w, prev_accel_w, sample_rate)

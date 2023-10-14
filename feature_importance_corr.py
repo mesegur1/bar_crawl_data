@@ -90,7 +90,7 @@ def generate_code_stubs(corr : pd.DataFrame):
     print("Max correlation with TAC = %.5f" % max_tac_corr)
     print("Min correlation with TAC = %.5f" % min_tac_corr)
 
-    threshold = 0.7
+    threshold = 0.6
     g = Graph(len(corr)-1) #Subtract added TAC column
     for f_x in important_feat:
         for f_y in important_feat:
