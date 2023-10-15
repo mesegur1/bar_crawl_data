@@ -70,6 +70,7 @@ def calc_feat_importance():
     feat_importance = predictor.feature_importance(data=df)
     print("output to CSV")
     feat_importance.to_csv("data/feat_importance.csv")
+    return feat_importance
     
     
 
@@ -78,8 +79,17 @@ if __name__ == "__main__":
     torch.set_default_tensor_type(torch.DoubleTensor)
 
     print("Start time: ", datetime.datetime.now().strftime("%H:%M:%S"))
-
-    # Load datasets in windowed format
-    load_all_pid_data()
-
-    calc_feat_importance()
+    imp = None
+    try:
+        imp = pd.read_csv("data/feat_importance.csv")
+    except:
+        pass
+    if imp is None:
+        # Load datasets in windowed format
+        load_all_pid_data()
+        imp = calc_feat_importance()
+    
+    top_120 = imp.iloc[:120, 0].values
+    top_120 = [int(x.split()[1])-1 for x in top_120]
+    print(top_120)
+    print("Length:", len(top_120))

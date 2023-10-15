@@ -30,7 +30,10 @@ if __name__ == "__main__":
         with open(filename, "r", newline="") as file:
             reader = csv.reader(file)
             y_true = np.array(next(reader), dtype=int)
-            preds = np.array(next(reader), dtype=int)
+            preds = []
+            for i in range(len(y_true)):
+                preds.append(np.array(next(reader), dtype=int))
+            preds = np.array(preds)
             precision = precision_score(y_true, preds)
             recall = recall_score(y_true, preds)
             b_acc = balanced_accuracy_score(y_true, preds)

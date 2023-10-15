@@ -21,12 +21,12 @@ MS_PER_SEC = 1000
 
 # Data windowing settings
 WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per window
-WINDOW_STEP = 400  # 10 second step: 10 seconds * 40Hz = 400 samples per step
+WINDOW_STEP = 360  # 9 second step: 9 seconds * 40Hz = 360 samples per step
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 40  # Hz
-MOTION_EPSILON = 0.0001
+MOTION_EPSILON = 0.001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PIDS = [
@@ -94,6 +94,7 @@ def load_combined_data(pids: list, test_ratio: float = 0.3, shuffle_w: bool = Fa
             train_data_set.append(d)
         for d in test_data:
             test_data_set.append(d)
+    
     if not shuffle_w:
         print("Sorting windows by timestamp")
         train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
