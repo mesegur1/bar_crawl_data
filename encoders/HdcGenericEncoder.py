@@ -44,5 +44,5 @@ class HdcGenericEncoder(torch.nn.Module):
         combined_hv = sample_hv + feat_hv + sample_hv * feat_hv
 
         # Apply activation function
-        combined_hv = torchhd.hard_quantize(combined_hv)
+        combined_hv = torch.cos(combined_hv) * torch.sin(combined_hv)
         return combined_hv.flatten()
