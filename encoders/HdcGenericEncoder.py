@@ -5,8 +5,10 @@ import torchhd
 from torchhd_custom import embeddings
 from torchhd_custom import functional
 
-NUM_CHANNEL = 4
-NGRAM_SIZE = 3
+NUM_CHANNEL = 3
+NGRAM_SIZE = 6
+SIGNAL_MIN = -5
+SIGNAL_MAX = 5
 
 # HDC Encoder for Bar Crawl Data
 class HdcGenericEncoder(torch.nn.Module):
@@ -15,7 +17,8 @@ class HdcGenericEncoder(torch.nn.Module):
 
         #Embeddings for raw data
         self.keys = embeddings.Random(NUM_CHANNEL, out_dimension, dtype=torch.float64)
-        self.embed = embeddings.Level(levels, out_dimension, dtype=torch.float64)
+        self.embed = embeddings.Level(levels, out_dimension, dtype=torch.float64, 
+                                      low=SIGNAL_MIN, high=SIGNAL_MAX)
         self.device = device
 
         #Embeddings for extracted feature data
@@ -25,11 +28,11 @@ class HdcGenericEncoder(torch.nn.Module):
     def forward(self, signals: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         # Use generic encoder
         sample_hvs = functional.generic(
-            self.keys.weight, self.embed(signals), NGRAM_SIZE
+            self.keys.weight, self.embed(signals[:, 1:]), NGRAM_SIZE
         )
         sample_hv = torchhd.multiset(sample_hvs)
 
-        # 20% of features (most important)
+        # # 20% of features (most important)
         feat_hv = self.feat_emb(feat[[557, 581, 553, 551, 92, 554, 579, 570, 573, 577, 565, 286, 
                                       555, 549, 13, 550, 63, 580, 556, 564, 0, 576, 567, 552, 578, 
                                       588, 597, 566, 571, 44, 572, 574, 14, 582, 381, 594, 4, 593, 
@@ -44,5 +47,5 @@ class HdcGenericEncoder(torch.nn.Module):
         combined_hv = sample_hv + feat_hv + sample_hv * feat_hv
 
         # Apply activation function
-        combined_hv = torch.cos(combined_hv) * torch.sin(combined_hv)
+        combined_hv = torchhd.hard_quantize(combined_hv)
         return combined_hv.flatten()
