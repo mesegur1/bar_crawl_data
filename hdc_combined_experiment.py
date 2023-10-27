@@ -178,7 +178,7 @@ def run_train(
                     if learning_mode == USE_DISTHD:
                         model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
                     if learning_mode == USE_NEURALHD:
-                        model.neural_regenerate((DISTHD_R * DIMENSIONS), encode, device)
+                        model.neural_regenerate(int(DISTHD_R * DIMENSIONS), encode, device)
             file.close()
     else:
         with torch.no_grad():
@@ -213,7 +213,7 @@ def run_train(
                 if learning_mode == USE_DISTHD:
                     model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
                 if learning_mode == USE_NEURALHD:
-                    model.neural_regenerate((DISTHD_R * DIMENSIONS), encode, device)
+                    model.neural_regenerate(int(DISTHD_R * DIMENSIONS), encode, device)
 
 
 def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool = True):
