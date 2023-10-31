@@ -21,12 +21,12 @@ MS_PER_SEC = 1000
 
 # Data windowing settings
 WINDOW = 400  # 10 second window: 10 seconds * 40Hz = 400 samples per window
-WINDOW_STEP = 400  # 10 second step: 10 seconds * 40Hz = 400 samples per step
+WINDOW_STEP = 360  # 9 second step: 9 seconds * 40Hz = 360 samples per step
 START_OFFSET = 0
 END_INDEX = np.inf
 TRAINING_EPOCHS = 1
 SAMPLE_RATE = 40  # Hz
-MOTION_EPSILON = 0.0001
+MOTION_EPSILON = 0.001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PIDS = [
@@ -94,6 +94,7 @@ def load_combined_data(pids: list, test_ratio: float = 0.3, shuffle_w: bool = Fa
             train_data_set.append(d)
         for d in test_data:
             test_data_set.append(d)
+    
     if not shuffle_w:
         print("Sorting windows by timestamp")
         train_data_set = sorted(train_data_set, key=lambda x : x[0][0][0])
@@ -152,6 +153,7 @@ def load_data(
     # Down sample data again
     input_data = input_data.resample("%dL" % (MS_PER_SEC / sample_rate)).last()
     input_data = input_data.interpolate(method="linear")
+    input_data = input_data.fillna(method="backfill")
 
     input_data["time"] = input_data.index
     input_data["time"] = input_data["time"].astype("int64")
@@ -180,7 +182,7 @@ def load_data(
     for base in tqdm(range(0, len(accel_data), window_step)):
         accel_w = accel_data[base : base + window]
         # Check for zeroed windows
-        if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] > 2:
+        if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] == window:
             #Compute TAC and extracted features
             tac_w = stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
             feat_w = feature_extraction(accel_w, prev_accel_w, sample_rate)

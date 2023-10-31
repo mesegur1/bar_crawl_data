@@ -13,12 +13,13 @@ from encoders.HdcCNNEncoder import HdcCNNEncoder
 from data_combined_reader import load_combined_data
 import torchmetrics
 import matplotlib.pyplot as plt
-from sklearn.metrics import RocCurveDisplay
 from sklearn.metrics import f1_score
+from sklearn.metrics import auc
 from tqdm import tqdm
 import csv
 import getopt, sys
 import datetime
+
 
 # Hyperparameters
 # Changing these affects performance up or down depending on PID
@@ -96,11 +97,12 @@ window = DEFAULT_WINDOW
 
 # PIDS1 = ["BK7610", "MC7070", "MJ8002", "SF3079"]
 
-PIDS2 = ["CC6740", "SA0297"]
+# PIDS2 = ["CC6740", "SA0297"]
 
-PIDS1 = [
+PIDS = [
     "BK7610",
     "BU4707",
+    "CC6740",
     "DC6359",
     "DK3500",
     "HV0618",
@@ -109,6 +111,7 @@ PIDS1 = [
     "MC7070",
     "MJ8002",
     "PC6771",
+    "SA0297",
     "SF3079",
 ]
 
@@ -120,7 +123,7 @@ def load_all_pid_data(test_ratio : float, shuffle_w: bool):
     global window
 
     print("Test ratio: %f" % test_ratio)
-    window, train_data_set, test_data_set = load_combined_data(PIDS1 + PIDS2, test_ratio, shuffle_w)
+    window, train_data_set, test_data_set = load_combined_data(PIDS, test_ratio, shuffle_w)
 
 
 # Run train for a given pid, with provided model and encoder
@@ -174,13 +177,17 @@ def run_train(
                         file.flush()
                     if learning_mode == USE_DISTHD:
                         model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
+                    if learning_mode == USE_NEURALHD:
+                        model.neural_regenerate(int(DISTHD_R * DIMENSIONS), encode, device)
             file.close()
     else:
         with torch.no_grad():
             for e in range(0, train_epochs):
                 print("Training Epoch %d" % (e))
                 for x, f, y in tqdm(train_data_set):
-                    input_tensor = torch.tensor(x, dtype=torch.float64, device=device)
+                    input_tensor = torch.tensor(
+                        x, dtype=torch.float64, device=device
+                    )
                     input_feat_tensor = torch.tensor(
                         f, dtype=torch.float64, device=device
                     )
@@ -188,7 +195,25 @@ def run_train(
                     input_hypervector = input_hypervector.unsqueeze(0)
                     label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                     label_tensor = label_tensor.unsqueeze(0)
-                    model.add_adjust_iterative(input_hypervector, label_tensor, lr=lr)
+                    if learning_mode == USE_ADD:
+                        model.add(input_hypervector, label_tensor, lr=lr)
+                    elif learning_mode == USE_ADAPTHD:
+                        model.add_adapt(input_hypervector, label_tensor, lr=lr)
+                    elif learning_mode == USE_ONLINEHD:
+                        model.add_online(input_hypervector, label_tensor, lr=lr)
+                    elif learning_mode == USE_ADJUSTHD:
+                        model.add_adjust_iterative(
+                            input_hypervector, label_tensor, lr=lr
+                        )
+                    elif learning_mode == USE_NEURALHD:
+                        model.add_neural(input_hypervector, label_tensor, lr=lr)
+                    elif learning_mode == USE_DISTHD:
+                        model.add_dist(input_hypervector, label_tensor, lr=lr)
+                        model.eval_dist(input_hypervector, label_tensor, device, alpha=DISTHD_ALPHA, beta=DISTHD_BETA, theta=DISTHD_THETA)
+                if learning_mode == USE_DISTHD:
+                    model.regenerate_dist(int(DISTHD_R * DIMENSIONS), encode, device)
+                if learning_mode == USE_NEURALHD:
+                    model.neural_regenerate(int(DISTHD_R * DIMENSIONS), encode, device)
 
 
 def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool = True):
@@ -199,6 +224,11 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
         num_classes=NUM_TAC_LEVELS,
     )
     accuracy = accuracy.to(device)
+    auroc = torchmetrics.AUROC(
+        task="multiclass",
+          num_classes=NUM_TAC_LEVELS,
+    )
+    auroc = auroc.to(device)
     if write_file == True:
         with open(
             "data/plot_data/test_data/test_data_downsampled.csv",
@@ -207,7 +237,8 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
         ) as file:
             writer = csv.writer(file)
             y_true = []
-            preds = []
+            y_preds = []
+            outputs = []
             with torch.no_grad():
                 for x, f, y in tqdm(test_data_set):
                     query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
@@ -215,13 +246,15 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
                         f, dtype=torch.float64, device=device
                     )
                     query_hypervector = encode(query_tensor, query_feat_tensor)
-                    output = model(query_hypervector, dot=False)
+                    output = model(query_hypervector, dot=True).unsqueeze(0)
                     y_pred = torch.argmax(output).unsqueeze(0).to(device)
                     label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                     label_tensor = label_tensor.unsqueeze(0)
                     accuracy.update(y_pred, label_tensor)
-                    preds.append(y_pred.item())
+                    auroc.update(output, label_tensor)
+                    y_preds.append(y_pred.item())
                     y_true.append(label_tensor.item())
+                    outputs.append(output.squeeze(0).cpu().numpy().tolist())
                     writer.writerow(
                         (x[-1][0], x[-1][1], x[-1][2], x[-1][3], y, y_pred.item())
                     )
@@ -229,24 +262,28 @@ def run_test(model: models.Centroid, encode: torch.nn.Module, write_file: bool =
             file.close()
     else:
         y_true = []
-        preds = []
+        y_preds = []
+        outputs = []
         with torch.no_grad():
             for x, f, y in tqdm(test_data_set):
                 query_tensor = torch.tensor(x, dtype=torch.float64, device=device)
                 query_feat_tensor = torch.tensor(f, dtype=torch.float64, device=device)
                 query_hypervector = encode(query_tensor, query_feat_tensor)
-                output = model(query_hypervector, dot=False)
+                output = model(query_hypervector, dot=True).unsqueeze(0)
                 y_pred = torch.argmax(output).unsqueeze(0).to(device)
                 label_tensor = torch.tensor(y, dtype=torch.int64, device=device)
                 label_tensor = label_tensor.unsqueeze(0)
                 accuracy.update(y_pred, label_tensor)
-                preds.append(y_pred.item())
+                auroc.update(output, label_tensor)
+                y_preds.append(y_pred.item())
                 y_true.append(label_tensor.item())
-
+                outputs.append(output.squeeze(0).cpu().numpy().tolist())
     print(f"Testing accuracy of model is {(accuracy.compute().item() * 100):.3f}%")
-    f1 = f1_score(y_true, preds, zero_division=0)
+    f1 = f1_score(y_true, y_preds, zero_division=0)
     print(f"Testing F1 Score of model is {(f1):.3f}")
-    return (accuracy.compute().item() * 100, f1)
+    auc = auroc.compute().item()
+    print(f"Testing AUC Score of model is {(auc):.3f}")
+    return (accuracy.compute().item() * 100, f1, auc, y_true, y_preds, outputs)
 
 
 # Run a test
@@ -372,15 +409,30 @@ if __name__ == "__main__":
         # Load datasets in windowed format
         load_all_pid_data(test_ratio, shuffle_w)
 
+        accuracy, f1, auc, y_true, y_preds, outputs = run_train_and_test(encoder, lmode, train_epochs, lr)
+
+        shuffle_string = ("shuffle" if shuffle_w else "ordered")
         with open(
-            "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f.csv"
-            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio),
+            "results/hdc_output_combined_%s_%s_%d_%.5f_test_ratio_%.5f_%s.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio, shuffle_string),
             "w",
             newline="",
         ) as file:
             writer = csv.writer(file)
-            accuracy, f1 = run_train_and_test(encoder, lmode, train_epochs, lr)
-            writer.writerow([accuracy, f1])
+            writer.writerow([accuracy, f1, auc])
+            file.flush()
+            file.close()
+        with open(
+            "results/labels_vs_pred_%s_%s_%d_%.5f_test_ratio_%.5f_%s.csv"
+            % (encoder_mode_str(encoder), learning_mode_str(lmode), train_epochs, lr, test_ratio, shuffle_string),
+            "w",
+            newline="",
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerow(y_true)
+            writer.writerow(y_preds)
+            for o in outputs:
+                writer.writerow(o)
             file.flush()
             file.close()
         print("All tests done")
