@@ -89,7 +89,12 @@ if __name__ == "__main__":
         load_all_pid_data()
         imp = calc_feat_importance()
     
+    feat = imp.iloc[:, 0].values
+    feat = [int(x.split()[1])-1 for x in feat]
+    wo_mfcc = [x for x in feat if x >= 546]
+    top_120_wo_mfcc = wo_mfcc[:120]
     top_120 = imp.iloc[:120, 0].values
     top_120 = [int(x.split()[1])-1 for x in top_120]
-    print(top_120)
+    print("Top 120 w MFCC", top_120)
+    print("Top 120 w/o MFCC", top_120_wo_mfcc)
     print("Length:", len(top_120))
