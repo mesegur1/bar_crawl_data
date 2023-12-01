@@ -180,12 +180,12 @@ def load_data(
     prev_accel_w = accel_data[0:window, :]
     print("Generating windowed data")
     for base in tqdm(range(0, len(accel_data), window_step)):
-        accel_w = np.nan_to_num(accel_data[base : base + window])
+        accel_w = accel_data[base : base + window]
         # Check for zeroed windows
         if is_greater_than(accel_w, MOTION_EPSILON) == True and accel_w.shape[0] == window:
             #Compute TAC and extracted features
             tac_w = stats.mode(tac_data_labels[base : base + window], keepdims=True)[0][0]
-            feat_w = np.nan_to_num(feature_extraction(accel_w, prev_accel_w, sample_rate))
+            feat_w = feature_extraction(accel_w, prev_accel_w, sample_rate)
 
             data_accel_w.append(accel_w)
             data_tac_w.append(tac_w)
