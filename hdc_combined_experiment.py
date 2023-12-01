@@ -326,7 +326,7 @@ def run_train_and_test(
 
 if __name__ == "__main__":
     print("Using {} device".format(device))
-    torch.set_default_tensor_type(torch.DoubleTensor)
+    torch.set_default_dtype(torch.float64)
 
     print("Start time: ", datetime.datetime.now().strftime("%H:%M:%S"))
 
